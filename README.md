@@ -1,10 +1,11 @@
 
 # FILES
 
-* bench		isolbench and utilities
-* scripts	test scripts
-* patches	kernel patches
-
+```
++- bench	isolbench and utilities
++- scripts	test scripts
++- patches	kernel patches
+```
 # Building IsolBench 
 
 ```
