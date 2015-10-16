@@ -1,5 +1,0 @@
-matrix01.exe -I	50000
-aifftr01.exe -I	50000
-aiifft01.exe -I	50000
-cacheb01.exe -I	30000000
-rgbhpg01.exe -I 1000 -autogo
