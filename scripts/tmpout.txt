@@ -1,5 +1,0 @@
-memsize=512 KB, type=read, cpuid=0
-stop at 4
-g_nread(bytes read) = 131756195840
-elapsed = 4.00 sec ( 4000001 usec )
-CPU0: B/W = 31413.12 MB/s | CPU0: average = 1.94 ns
