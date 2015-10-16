@@ -1,0 +1,185 @@
+#!/bin/bash
+
+PATH=$PATH:..:../bench:$HOME/Projects/eembc/automotive/gcc/bin:$HOME/Projects/eembc/consumer/gcc/bin
+DBGFS=/sys/kernel/debug/palloc
+MAXCPU=`cat /proc/cpuinfo  | grep processor | tail -n 1 | awk '{ print $3 }'`
+# [ -z "$MAXCPU" ] && MAXCPU=3
+outputfile=log.txt
+
+error()
+{
+    echo "ERR: $*"
+    exit
+}
+
+log_echo()
+{
+   echo "$*"
+   echo $* >> $outputfile
+}
+
+cleanup()
+{
+    killall latency latency-mlp bandwidth
+    kill_spec >& /dev/null
+    sleep 1
+    echo flush > /sys/kernel/debug/palloc/control
+}
+
+
+set_palloc_config()
+{
+    SYSTEM=`hostname`
+    echo "initialize palloc configuration."
+    if [ "$SYSTEM" = "icecream" ]; then
+	PALLOC_MASK=0x00018000   # bank bits: 15,16 (works for Intel Nehalem)
+    else
+	PALLOC_MASK=0x0000C000   # bank bits: 14,15 (works for both Cortex-A15, and Cortex-A7)
+    fi
+    echo $PALLOC_MASK > $DBGFS/palloc_mask
+    cat $DBGFS/control
+    cat $DBGFS/use_mc_xor
+}
+
+set_subject_cgroup()
+{
+    local startcpu=$1
+    [ -z "$startcpu" ] && startcpu=0
+
+    mkdir /sys/fs/cgroup/subject
+    pushd /sys/fs/cgroup/subject
+
+    echo $startcpu     > cpuset.cpus
+    echo 0      > cpuset.mems
+    echo 950000 > cpu.rt_runtime_us # to allow RT schedulers
+    popd
+}
+
+set_percore_cgroup()
+{
+    for cpu in `seq 1 $MAXCPU`; do
+	[ ! -d "/sys/fs/cgroup/core$cpu" ] && mkdir -v /sys/fs/cgroup/core$cpu
+	pushd /sys/fs/cgroup/core$cpu
+	echo 0-$MAXCPU  > cpuset.cpus
+	echo 0    	> cpuset.mems
+	popd
+    done
+}
+
+set_buddy()
+{
+    PALLOC_MODE="buddy"
+    log_echo $PALLOC_MODE
+    echo 0 > /sys/kernel/debug/palloc/use_palloc
+    echo "flush" > /sys/kernel/debug/palloc/control
+}
+
+set_pbpc()
+{
+    set_buddy
+
+    PALLOC_MODE="PB+PC"
+    log_echo $PALLOC_MODE
+    set_cgroup_bins subject "0"
+
+    set_cgroup_bins core1 "1"
+    set_cgroup_bins core2 "2"
+    set_cgroup_bins core3 "3"
+
+    if [ $MAXCPU -gt 4 ]; then
+        set_cgroup_bins core5 "1"  #only for odroid-xu4
+        set_cgroup_bins core6 "2"
+        set_cgroup_bins core7 "3"
+    fi
+
+    echo 1 > /sys/kernel/debug/palloc/use_palloc
+    echo 2 > /sys/kernel/debug/palloc/debug_level
+    echo 4 > /sys/kernel/debug/palloc/alloc_balance
+}
+
+# same cache partition (2MB), same bank partition
+set_worst()
+{
+    set_buddy
+
+    PALLOC_MODE="WORST"
+    log_echo $PALLOC_MODE
+    set_cgroup_bins subject "0"
+
+    set_cgroup_bins core1 "0"
+    set_cgroup_bins core2 "0"
+    set_cgroup_bins core3 "0"
+
+    if [ $MAXCPU -gt 4 ]; then
+        set_cgroup_bins core5 "0"
+        set_cgroup_bins core6 "0"
+        set_cgroup_bins core7 "0"
+    fi
+    echo 1 > /sys/kernel/debug/palloc/use_palloc
+    echo 2 > /sys/kernel/debug/palloc/debug_level
+    echo 4 > /sys/kernel/debug/palloc/alloc_balance
+}
+
+set_shareall()
+{
+    set_buddy
+
+    PALLOC_MODE="SHARE"
+    log_echo $PALLOC_MODE
+    set_cgroup_bins subject "0-3"
+
+    set_cgroup_bins core1 "0-3"
+    set_cgroup_bins core2 "0-3"
+    set_cgroup_bins core3 "0-3"
+
+    if [ $MAXCPU -gt 4 ]; then
+        set_cgroup_bins core5 "0-3"
+        set_cgroup_bins core6 "0-3"
+        set_cgroup_bins core7 "0-3"
+    fi
+    echo 1 > /sys/kernel/debug/palloc/use_palloc
+    echo 2 > /sys/kernel/debug/palloc/debug_level
+    echo 4 > /sys/kernel/debug/palloc/alloc_balance
+}
+
+
+set_cgroup_bins()
+{
+    cg="$1"
+    bins="$2"
+    log_echo "Bins[$bins]"
+    echo 200000000 > /sys/fs/cgroup/$cg/memory.limit_in_bytes || error "No cgroup $cg"
+    echo $bins  > /sys/fs/cgroup/$cg/palloc.bins || error "Bins $bins error"
+    echo $$ > /sys/fs/cgroup/$cg/tasks
+
+    echo 0-$MAXCPU > /sys/fs/cgroup/$cg/cpuset.cpus
+    echo 0 > /sys/fs/cgroup/$cg/cpuset.mems
+}
+
+print_allocated_colors()
+{
+    pgm=$1
+    for pid in `pidof $pgm`; do
+	pagetype -p $pid -k $PALLOC_MASK | grep "color" 
+    done
+}
+
+init_system()
+{
+    service lightdm stop
+
+    if (mount | grep systemd); then
+        umount systemd
+        umount /sys/fs/cgroup
+    fi
+    sleep 1
+
+    if !(mount | grep cgroup); then
+	mount -t cgroup xxx /sys/fs/cgroup
+    fi
+
+    set_palloc_config
+
+    echo flush > $DBGFS/control
+}
+
