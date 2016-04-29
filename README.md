@@ -18,7 +18,7 @@ $ make
 
 ```
 
-## Identifying local and global MLP
+## Identifying Local and Global MLP
 
 ```
 $ cd scripts
@@ -34,7 +34,7 @@ First, apply the palloc patch to your kernel (see 'patches' directory)
 
 Run the following test script to run 6 IsolBench workloads to test
 the isolation quality of your system in which the LLC is partitioned 
-using PALLOC. (NOTE: you many need to adjust PALLOC setting to reflect 
+using PALLOC. (NOTE: you may need to adjust PALLOC setting to reflect 
 cache configuration of your system; see 'scripts/function' file. )
 
 ```
