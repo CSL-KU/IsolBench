@@ -24,8 +24,10 @@ $ make
 $ cd scripts
 $ sudo ./init-hugetlbfs.sh
        --> enable huge pages
+$ sudo ./mlptest.sh 10 0
+       --> test up to 10 MLP, 1 instance (solo)
 $ sudo ./mlptest.sh 10 1
-       --> test up to 10 MLP, w/ 1 instance 
+       --> test up to 10 MLP, 2 instance (+1 corun)
 ```
 
 ## Evaluating Isolation Effect of Cache Partitioning
