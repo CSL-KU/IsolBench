@@ -87,11 +87,11 @@ startcpu=$1
 
 if grep "0xc0f" /proc/cpuinfo; then
     # cortex-a15
-    llc_ws=48
+    llc_ws=96
     dram_ws=4096
 elif grep "0xc09" /proc/cpuinfo; then
     # cortex-a9
-    llc_ws=48
+    llc_ws=96
     dram_ws=4096
 elif grep "0xc07" /proc/cpuinfo; then
     # cortex-a7
