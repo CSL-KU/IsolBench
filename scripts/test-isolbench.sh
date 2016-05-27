@@ -25,7 +25,7 @@ test_latency_vs_bandwidth()
 
         # launch a subject
 	echo $$ > /sys/fs/cgroup/subject/tasks
-	latency -m $size_in_kb_subject -c $startcpu -i 10000 2> /dev/null > tmpout.txt
+	latency -m $size_in_kb_subject -c $startcpu -i 10000 -r 1 2> /dev/null > tmpout.txt
         output=`grep average tmpout.txt | awk '{ print $2 }'`
 	log_echo $output
     # cleanup >& /dev/null
@@ -56,7 +56,7 @@ test_bandwidth_vs_bandwidth()
 
         # launch a subject
 	echo $$ > /sys/fs/cgroup/subject/tasks
-        bandwidth -m $size_in_kb_subject -t 4 -c $startcup 2> /dev/null > tmpout.txt 
+        bandwidth -m $size_in_kb_subject -t 4 -c $startcpu -r 1 2> /dev/null > tmpout.txt 
         output=`grep average tmpout.txt | awk '{ print $10 }'`
 	log_echo $output
     done	

@@ -130,11 +130,12 @@ int main(int argc, char *argv[])
 	cpu_set_t cmask;
 	int iterations = 0;
 	int i;
+	struct sched_param param;
 
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt(argc, argv, "m:a:n:t:c:i:p:f:l:xh")) != -1) {
+	while ((opt = getopt(argc, argv, "m:a:n:t:c:i:p:r:f:l:xh")) != -1) {
 		switch (opt) {
 		case 'm': /* set memory size */
 			g_mem_size = 1024 * strtol(optarg, NULL, 0);
@@ -162,7 +163,15 @@ int main(int argc, char *argv[])
 			else
 				fprintf(stderr, "assigned to cpu %d\n", cpuid);
 			break;
-			
+
+		case 'r':
+			prio = strtol(optarg, NULL, 0);
+			param.sched_priority = prio; /* 1(low)- 99(high) for SCHED_FIFO or SCHED_RR
+						        0 for SCHED_OTHER or SCHED_BATCH */
+			if(sched_setscheduler(0, SCHED_FIFO, &param) == -1) {
+				perror("sched_setscheduler failed");
+			}
+			break;
 		case 'p': /* set priority */
 			prio = strtol(optarg, NULL, 0);
 			if (setpriority(PRIO_PROCESS, 0, prio) < 0)

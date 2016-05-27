@@ -31,7 +31,7 @@ set_palloc_config()
 {
     SYSTEM=`hostname`
     echo "initialize palloc configuration."
-    if [ "$SYSTEM" = "icecream" ]; then
+    if grep "W3530" /proc/cpuinfo; then
 	PALLOC_MASK=0x00018000   # bank bits: 15,16 (works for Intel Nehalem)
     else
 	PALLOC_MASK=0x0000C000   # bank bits: 14,15 (works for both Cortex-A15, and Cortex-A7)

@@ -103,7 +103,7 @@ int main(int argc, char* argv[])
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt(argc, argv, "m:sc:i:p:h")) != -1) {
+	while ((opt = getopt(argc, argv, "m:sc:i:p:hr:")) != -1) {
 		switch (opt) {
 		case 'm': /* set memory size */
 			g_mem_size = 1024 * strtol(optarg, NULL, 0);
@@ -121,8 +121,15 @@ int main(int argc, char* argv[])
 			else
 				fprintf(stderr, "assigned to cpu %d\n", cpuid);
 			break;
-
-		case 'p': /* set priority */
+		case 'r':
+			prio = strtol(optarg, NULL, 0);
+			param.sched_priority = prio; /* 1(low)- 99(high) for SCHED_FIFO or SCHED_RR
+						        0 for SCHED_OTHER or SCHED_BATCH */
+			if(sched_setscheduler(0, SCHED_FIFO, &param) == -1) {
+				perror("sched_setscheduler failed");
+			}
+			break;
+		case 'p': /* set priority (nice value: -20..19) */
 			prio = strtol(optarg, NULL, 0);
 			if (setpriority(PRIO_PROCESS, 0, prio) < 0)
 				perror("error");
@@ -141,15 +148,6 @@ int main(int argc, char* argv[])
 
 	workingset_size = g_mem_size / CACHE_LINE_SIZE;
 	srand(0);
-
-#if 0
-        param.sched_priority = 1; /* 1(low) - 99(high) for SCHED_FIFO or SCHED_RR
-				     0 for SCHED_OTHER or SCHED_BATCH */
-        if(sched_setscheduler(0, SCHED_FIFO, &param) == -1) {
-		perror("sched_setscheduler failed");
-        }
-#endif
-
 	INIT_LIST_HEAD(&head);
 
 	/* allocate */
@@ -202,4 +200,5 @@ int main(int argc, char* argv[])
 	       (double)64*1000/avglat, 
 	       (double)64*1000000000/avglat/1024/1024);
 	printf("readsum  %lld\n", (unsigned long long)readsum);
+	return 0;
 }
