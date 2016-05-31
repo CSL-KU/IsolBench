@@ -151,9 +151,6 @@ set_cgroup_bins()
     echo 200000000 > /sys/fs/cgroup/$cg/memory.limit_in_bytes || error "No cgroup $cg"
     echo $bins  > /sys/fs/cgroup/$cg/palloc.bins || error "Bins $bins error"
     echo $$ > /sys/fs/cgroup/$cg/tasks
-
-    echo 0-$MAXCPU > /sys/fs/cgroup/$cg/cpuset.cpus
-    echo 0 > /sys/fs/cgroup/$cg/cpuset.mems
 }
 
 print_allocated_colors()
