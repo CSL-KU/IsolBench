@@ -101,6 +101,11 @@ elif grep "0xc05" /proc/cpuinfo; then
     # cortex-a5
     llc_ws=48
     dram_ws=4096
+elif grep "0xd07" /proc/cpuinfo; then
+    # cortex-a53
+    llc_ws=48
+    dram_ws=4096
+    echo "Cortex-A53. PI3"
 elif grep "W3530" /proc/cpuinfo; then
     # nehalem
     llc_ws=512
