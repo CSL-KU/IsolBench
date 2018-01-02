@@ -14,18 +14,27 @@ test_latency_vs_bandwidth()
 
     log_echo "latency($size_in_kb_subject) bandwidth_$acc_type ($size_in_kb_corun)"
 
-    for cpu in `seq $startcpu $endcpu`; do 
+    for cpu in `seq $startcpu $endcpu`; do
         if [ $cpu -ne $startcpu ]; then
             # launch a co-runner
-	    echo $$ > /sys/fs/cgroup/core$cpu/tasks
-	    bandwidth -m $size_in_kb_corun -c $cpu -t 1000000 -a $acc_type >& /dev/null &
+	    if [ "$USE_SYSTEMD" = "yes" ]; then 
+		cgexec -g palloc:core$cpu bandwidth -m $size_in_kb_corun -c $cpu -t 1000000 -a $acc_type >& /dev/null &
+	    else
+		echo $$ > /sys/fs/cgroup/palloc/core$cpu/tasks
+		bandwidth -m $size_in_kb_corun -c $cpu -t 1000000 -a $acc_type >& /dev/null &
+	    fi
 	    sleep 2
 	    print_allocated_colors bandwidth
         fi
 
         # launch a subject
-	echo $$ > /sys/fs/cgroup/subject/tasks
-	latency -m $size_in_kb_subject -c $startcpu -i 10000 -r 1 2> /dev/null > tmpout.txt
+	if [ "$USE_SYSTEMD" = "yes" ]; then 	
+	    cgexec -g palloc:subject latency -m $size_in_kb_subject -c $startcpu -i 10000 -r 1 2> /dev/null > tmpout.txt
+	else
+	    echo $$ > /sys/fs/cgroup/palloc/subject/tasks
+	    latency -m $size_in_kb_subject -c $startcpu -i 10000 -r 1 2> /dev/null > tmpout.txt
+	fi
+	    
         output=`grep average tmpout.txt | awk '{ print $2 }'`
 	log_echo $output
     # cleanup >& /dev/null
@@ -48,15 +57,23 @@ test_bandwidth_vs_bandwidth()
     for cpu in `seq $startcpu $endcpu`; do 
         if [ $cpu -ne $startcpu ]; then
             # launch a co-runner
-	    echo $$ > /sys/fs/cgroup/core$cpu/tasks
-	    bandwidth -m $size_in_kb_corun -c $cpu -t 1000000 -a $acc_type >& /dev/null &
+	    if [ "$USE_SYSTEMD" = "yes" ]; then 		    
+		cgexec -g palloc:core$cpu bandwidth -m $size_in_kb_corun -c $cpu -t 1000000 -a $acc_type >& /dev/null &
+	    else
+		echo $$ > /sys/fs/cgroup/palloc/core$cpu/tasks
+		bandwidth -m $size_in_kb_corun -c $cpu -t 1000000 -a $acc_type >& /dev/null &
+	    fi
 	    sleep 2
 	    print_allocated_colors bandwidth
         fi
 
         # launch a subject
-	echo $$ > /sys/fs/cgroup/subject/tasks
-        bandwidth -m $size_in_kb_subject -t 4 -c $startcpu -r 1 2> /dev/null > tmpout.txt 
+	if [ "$USE_SYSTEMD" = "yes" ]; then
+            cgexec -g palloc:subject bandwidth -m $size_in_kb_subject -t 4 -c $startcpu -r 1 2> /dev/null > tmpout.txt
+	else
+	    echo $$ > /sys/fs/cgroup/palloc/subject/tasks
+            bandwidth -m $size_in_kb_subject -t 4 -c $startcpu -r 1 2> /dev/null > tmpout.txt
+	fi
         output=`grep average tmpout.txt | awk '{ print $10 }'`
 	log_echo $output
     done	
@@ -84,7 +101,6 @@ startcpu=$1
     set_percore_cgroup
 # fi
 
-
 if grep "0xc0f" /proc/cpuinfo; then
     # cortex-a15
     llc_ws=96
@@ -101,7 +117,7 @@ elif grep "0xc05" /proc/cpuinfo; then
     # cortex-a5
     llc_ws=48
     dram_ws=4096
-elif grep "0xd07" /proc/cpuinfo; then
+elif grep "0xd03" /proc/cpuinfo; then
     # cortex-a53
     llc_ws=48
     dram_ws=4096
@@ -110,6 +126,8 @@ elif grep "W3530" /proc/cpuinfo; then
     # nehalem
     llc_ws=512
     dram_ws=16384
+else
+    error "CPU specific 'llc_ws' and 'dram_ws' variables are not set"
 fi
 
 size_in_kb_subject=$llc_ws
@@ -117,9 +135,9 @@ size_in_kb_subject=$llc_ws
 set_pbpc
 # set_shareall
 # set_worst
-test_latency_vs_bandwidth $dram_ws "read" $startcpu
-test_bandwidth_vs_bandwidth $dram_ws "read" $startcpu
-test_bandwidth_vs_bandwidth $llc_ws "read" $startcpu
+# test_latency_vs_bandwidth $dram_ws "read" $startcpu
+# test_bandwidth_vs_bandwidth $dram_ws "read" $startcpu
+# test_bandwidth_vs_bandwidth $llc_ws "read" $startcpu
 test_latency_vs_bandwidth $dram_ws "write" $startcpu
 test_bandwidth_vs_bandwidth $dram_ws "write" $startcpu
 test_bandwidth_vs_bandwidth $llc_ws "write" $startcpu

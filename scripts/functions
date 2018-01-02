@@ -6,6 +6,8 @@ MAXCPU=`cat /proc/cpuinfo  | grep processor | tail -n 1 | awk '{ print $3 }'`
 # [ -z "$MAXCPU" ] && MAXCPU=3
 outputfile=log.txt
 
+USE_SYSTEMD=no
+
 error()
 {
     echo "ERR: $*"
@@ -46,6 +48,11 @@ set_subject_cgroup()
     local startcpu=$1
     [ -z "$startcpu" ] && startcpu=0
 
+    if [ "$USE_SYSTEMD" = "yes" ]; then
+	cgcreate -g palloc:subject
+	return
+    fi
+    
     mkdir /sys/fs/cgroup/subject
     pushd /sys/fs/cgroup/subject
 
@@ -58,11 +65,15 @@ set_subject_cgroup()
 set_percore_cgroup()
 {
     for cpu in `seq 1 $MAXCPU`; do
-	[ ! -d "/sys/fs/cgroup/core$cpu" ] && mkdir -v /sys/fs/cgroup/core$cpu
-	pushd /sys/fs/cgroup/core$cpu
-	echo 0-$MAXCPU  > cpuset.cpus
-	echo 0    	> cpuset.mems
-	popd
+	if [ "$USE_SYSTEMD" = "yes" ]; then
+	    cgcreate -g palloc:core$cpu
+	else
+	    [ ! -d "/sys/fs/cgroup/core$cpu" ] && mkdir -v /sys/fs/cgroup/core$cpu
+	    pushd /sys/fs/cgroup/core$cpu
+	    echo 0-$MAXCPU  > cpuset.cpus
+	    echo 0    	> cpuset.mems
+	    popd
+	fi
     done
 }
 
@@ -142,12 +153,19 @@ set_shareall()
     echo 4 > /sys/kernel/debug/palloc/alloc_balance
 }
 
-
 set_cgroup_bins()
 {
     cg="$1"
     bins="$2"
     log_echo "Bins[$bins]"
+
+    if [ "$USE_SYSTEMD" = "yes" ]; then
+	cg="palloc/$1"
+	echo $bins  > /sys/fs/cgroup/$cg/palloc.bins || error "Bins $bins error"
+	echo $$ > /sys/fs/cgroup/$cg/tasks
+	return
+    fi
+    
     echo 200000000 > /sys/fs/cgroup/$cg/memory.limit_in_bytes || error "No cgroup $cg"
     echo $bins  > /sys/fs/cgroup/$cg/palloc.bins || error "Bins $bins error"
     echo $$ > /sys/fs/cgroup/$cg/tasks
@@ -168,18 +186,15 @@ init_system()
 {
     service lightdm stop
 
+    set_palloc_config
+    echo flush > $DBGFS/control
+    
     if (mount | grep systemd); then
-        umount systemd
-        umount /sys/fs/cgroup
-    fi
-    sleep 1
-
-    if !(mount | grep cgroup); then
+        # umount systemd
+        # umount /sys/fs/cgroup
+	USE_SYSTEMD=yes
+    elif !(mount | grep cgroup); then
 	mount -t cgroup xxx /sys/fs/cgroup
     fi
 
-    set_palloc_config
-
-    echo flush > $DBGFS/control
 }
-
