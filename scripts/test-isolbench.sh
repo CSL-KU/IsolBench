@@ -135,9 +135,9 @@ size_in_kb_subject=$llc_ws
 set_pbpc
 # set_shareall
 # set_worst
-# test_latency_vs_bandwidth $dram_ws "read" $startcpu
-# test_bandwidth_vs_bandwidth $dram_ws "read" $startcpu
-# test_bandwidth_vs_bandwidth $llc_ws "read" $startcpu
+test_latency_vs_bandwidth $dram_ws "read" $startcpu
+test_bandwidth_vs_bandwidth $dram_ws "read" $startcpu
+test_bandwidth_vs_bandwidth $llc_ws "read" $startcpu
 test_latency_vs_bandwidth $dram_ws "write" $startcpu
 test_bandwidth_vs_bandwidth $dram_ws "write" $startcpu
 test_bandwidth_vs_bandwidth $llc_ws "write" $startcpu
