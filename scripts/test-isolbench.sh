@@ -10,30 +10,24 @@ test_latency_vs_bandwidth()
 
     [ -z "$acc_type" -o -z "$size_in_kb_corun" ] && error "size_in_kb_corun or acc_type is not set"
     [ -z "$startcpu" ] && startcpu=0
+#    [ -z "$CG_PALLOC_DIR" ] && error "CG_PALLOC_DIR is not set"
+
     endcpu=`expr $startcpu + 3`
-
+    
     log_echo "latency($size_in_kb_subject) bandwidth_$acc_type ($size_in_kb_corun)"
-
+    
     for cpu in `seq $startcpu $endcpu`; do
         if [ $cpu -ne $startcpu ]; then
             # launch a co-runner
-	    if [ "$USE_SYSTEMD" = "yes" ]; then 
-		cgexec -g palloc:core$cpu bandwidth -m $size_in_kb_corun -c $cpu -t 1000000 -a $acc_type >& /dev/null &
-	    else
-		echo $$ > /sys/fs/cgroup/palloc/core$cpu/tasks
-		bandwidth -m $size_in_kb_corun -c $cpu -t 1000000 -a $acc_type >& /dev/null &
-	    fi
+	    [ -d "$CG_PALLOC_DIR" ] && echo $$ > $CG_PALLOC_DIR/core$cpu/tasks
+	    bandwidth -m $size_in_kb_corun -c $cpu -t 1000000 -a $acc_type >& /dev/null &
 	    sleep 2
 	    print_allocated_colors bandwidth
         fi
 
         # launch a subject
-	if [ "$USE_SYSTEMD" = "yes" ]; then 	
-	    cgexec -g palloc:subject latency -m $size_in_kb_subject -c $startcpu -i 10000 -r 1 2> /dev/null > tmpout.txt
-	else
-	    echo $$ > /sys/fs/cgroup/palloc/subject/tasks
-	    latency -m $size_in_kb_subject -c $startcpu -i 10000 -r 1 2> /dev/null > tmpout.txt
-	fi
+	[ -d "$CG_PALLOC_DIR" ] && echo $$ > $CG_PALLOC_DIR/subject/tasks
+	latency -m $size_in_kb_subject -c $startcpu -i 10000 -r 1 2> /dev/null > tmpout.txt
 	    
         output=`grep average tmpout.txt | awk '{ print $2 }'`
 	log_echo $output
@@ -50,6 +44,8 @@ test_bandwidth_vs_bandwidth()
 
     [ -z "$acc_type" -o -z "$size_in_kb_corun" ] && error "size_in_kb_corun or acc_type is not set"
     [ -z "$startcpu" ] && startcpu=0
+#    [ -z "$CG_PALLOC_DIR" ] && error "CG_PALLOC_DIR is not set"
+    
     endcpu=`expr $startcpu + 3`
 
     log_echo "bandwidth_read ($size_in_kb_subject) bandwidth_$acc_type ($size_in_kb_corun)"
@@ -57,23 +53,15 @@ test_bandwidth_vs_bandwidth()
     for cpu in `seq $startcpu $endcpu`; do 
         if [ $cpu -ne $startcpu ]; then
             # launch a co-runner
-	    if [ "$USE_SYSTEMD" = "yes" ]; then 		    
-		cgexec -g palloc:core$cpu bandwidth -m $size_in_kb_corun -c $cpu -t 1000000 -a $acc_type >& /dev/null &
-	    else
-		echo $$ > /sys/fs/cgroup/palloc/core$cpu/tasks
-		bandwidth -m $size_in_kb_corun -c $cpu -t 1000000 -a $acc_type >& /dev/null &
-	    fi
+	    [ -d "$CG_PALLOC_DIR" ] && echo $$ > $CG_PALLOC_DIR/core$cpu/tasks
+	    bandwidth -m $size_in_kb_corun -c $cpu -t 1000000 -a $acc_type >& /dev/null &
 	    sleep 2
 	    print_allocated_colors bandwidth
         fi
 
         # launch a subject
-	if [ "$USE_SYSTEMD" = "yes" ]; then
-            cgexec -g palloc:subject bandwidth -m $size_in_kb_subject -t 4 -c $startcpu -r 1 2> /dev/null > tmpout.txt
-	else
-	    echo $$ > /sys/fs/cgroup/palloc/subject/tasks
-            bandwidth -m $size_in_kb_subject -t 4 -c $startcpu -r 1 2> /dev/null > tmpout.txt
-	fi
+	[ -d "$CG_PALLOC_DIR" ] && echo $$ > $CG_PALLOC_DIR/subject/tasks
+        bandwidth -m $size_in_kb_subject -t 4 -c $startcpu -r 1 2> /dev/null > tmpout.txt
         output=`grep average tmpout.txt | awk '{ print $10 }'`
 	log_echo $output
     done	
@@ -89,17 +77,22 @@ print_env()
 }
 
 cleanup >& /dev/null
-init_system
 
-outputfile=log.txt
-startcpu=$1
-[ -z "$startcpu" ] && startcpu=0
+if [ -d "/sys/kernel/debug/palloc" ]; then
+    echo "This kernel supports PALLOC. initialize."
+    echo flush > /sys/kernel/debug/palloc/control
 
-# if [ ! -d "/sys/fs/cgroup/subject" ]; then
+    init_system
+
     set_palloc_config
     set_subject_cgroup $startcpu
     set_percore_cgroup
-# fi
+
+    # cache partition setup.
+    set_pbpc        # equal partition
+    # set_shareall  # no partition
+    # set_worst     # worst partition
+fi
 
 if grep "0xc0f" /proc/cpuinfo; then
     # cortex-a15
@@ -132,9 +125,10 @@ fi
 
 size_in_kb_subject=$llc_ws
 
-set_pbpc
-# set_shareall
-# set_worst
+outputfile=log.txt
+startcpu=$1
+[ -z "$startcpu" ] && startcpu=0
+
 test_latency_vs_bandwidth $dram_ws "read" $startcpu
 test_bandwidth_vs_bandwidth $dram_ws "read" $startcpu
 test_bandwidth_vs_bandwidth $llc_ws "read" $startcpu
