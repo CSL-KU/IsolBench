@@ -23,7 +23,6 @@ cleanup()
     killall latency latency-mlp bandwidth
     kill_spec >& /dev/null
     sleep 1
-    echo flush > /sys/kernel/debug/palloc/control
 }
 
 
@@ -43,26 +42,17 @@ set_palloc_config()
 
 set_subject_cgroup()
 {
-    local startcpu=$1
-    [ -z "$startcpu" ] && startcpu=0
-
-    mkdir /sys/fs/cgroup/subject
-    pushd /sys/fs/cgroup/subject
-
-    echo $startcpu     > cpuset.cpus
-    echo 0      > cpuset.mems
-    echo 950000 > cpu.rt_runtime_us # to allow RT schedulers
-    popd
+    [ ! -d "${CG_PALLOC_DIR}" ] && return
+    [ ! -d "${CG_PALLOC_DIR}/subject" ] && mkdir $CG_PALLOC_DIR/subject
+#    [ ! -d "${CG_CPUSET_DIR}/subject" ] && mkdir $CG_CPUSET_DIR/subject    
 }
 
 set_percore_cgroup()
 {
+    [ ! -d "${CG_PALLOC_DIR}" ] && return    
     for cpu in `seq 1 $MAXCPU`; do
-	[ ! -d "/sys/fs/cgroup/core$cpu" ] && mkdir -v /sys/fs/cgroup/core$cpu
-	pushd /sys/fs/cgroup/core$cpu
-	echo 0-$MAXCPU  > cpuset.cpus
-	echo 0    	> cpuset.mems
-	popd
+	[ ! -d "${CG_PALLOC_DIR}/core$cpu" ] && mkdir -v $CG_PALLOC_DIR/core$cpu
+	[ ! -d "${CG_CPUSET_DIR}/core$cpu" ] && mkdir -v $CG_CPUSET_DIR/core$cpu        
     done
 }
 
@@ -142,22 +132,26 @@ set_shareall()
     echo 4 > /sys/kernel/debug/palloc/alloc_balance
 }
 
-
 set_cgroup_bins()
 {
     cg="$1"
     bins="$2"
     log_echo "Bins[$bins]"
-    echo 200000000 > /sys/fs/cgroup/$cg/memory.limit_in_bytes || error "No cgroup $cg"
-    echo $bins  > /sys/fs/cgroup/$cg/palloc.bins || error "Bins $bins error"
-    echo $$ > /sys/fs/cgroup/$cg/tasks
+
+    # echo 200000000 > /sys/fs/cgroup/$cg/memory.limit_in_bytes || error "No cgroup $cg"
+    
+    echo $bins  > $CG_PALLOC_DIR/$cg/palloc.bins || error "Bins $bins error"
+    echo $$ > $CG_PALLOC_DIR/$cg/tasks
+
+    # echo 0-$MAXCPU > $CG_CPUSET_DIR/cpuset.cpus
+    # echo 0 > $CG_CPUSET_DIR/cpuset.mems
 }
 
 print_allocated_colors()
 {
     pgm=$1
     for pid in `pidof $pgm`; do
-	pagetype -p $pid -k $PALLOC_MASK | grep "color" 
+	[ ! -z "$PALLOC_MASK" ] && pagetype -p $pid -k $PALLOC_MASK | grep "color" 
     done
 }
 
@@ -165,18 +159,17 @@ init_system()
 {
     service lightdm stop
 
-    if (mount | grep systemd); then
-        umount systemd
-        umount /sys/fs/cgroup
-    fi
-    sleep 1
-
-    if !(mount | grep cgroup); then
-	mount -t cgroup xxx /sys/fs/cgroup
-    fi
-
     set_palloc_config
-
     echo flush > $DBGFS/control
+    
+    if (mount | grep systemd); then
+        # recent kernels
+	export CG_PALLOC_DIR="/sys/fs/cgroup/palloc"
+        export CG_CPUSET_DIR="/sys/fs/cgroup/cpuset"
+    elif !(mount | grep cgroup); then
+        # old kernels
+	mount -t cgroup xxx /sys/fs/cgroup
+        export CG_PALLOC_DIR="/sys/fs/cgroup"
+        export CG_CPUSET_DIR="/sys/fs/cgroup"
+    fi
 }
-
