@@ -1,5 +1,0 @@
-aifftr01.exe -I	50000
-aiifft01.exe -I	50000
-cacheb01.exe -I	30000000
-rgbhpg01.exe -I 3000 
-rgbyiq01.exe -I 3000
