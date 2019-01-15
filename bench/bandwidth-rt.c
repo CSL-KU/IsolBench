@@ -322,7 +322,7 @@ int main(int argc, char *argv[])
 				sum += bench_write();
 				break;
 			}
-			if (verbose > 1) printf(".");
+			if (verbose > 1) fprintf(stderr, ".");
 			if (iterations > 0 && i+1 >= iterations)
 				break;
 		}
