@@ -203,6 +203,7 @@ int main(int argc, char *argv[])
 	
 	static struct option long_options[] = {
 		{"period",  required_argument, 0,  'l' },
+		{"jobs",    required_argument, 0,  'j' },
 		{"verbose", required_argument, 0,  'v' },
 		{0,         0,                 0,  0 }
 	};
@@ -288,11 +289,12 @@ int main(int argc, char *argv[])
 		g_mem_ptr[i] = i;
 
 	/* print experiment info before starting */
-	printf("memsize=%d KB, type=%s, cpuid=%d, iterations=%d, period=%d\n",
+	printf("memsize=%d KB, type=%s, cpuid=%d, iterations=%d, jobs=%d, period=%d\n",
 	       g_mem_size/1024,
 	       ((acc_type==READ) ?"read": "write"),
 	       cpuid,
 	       iterations,
+               jobs,
 	       period);
 	printf("stop at %d\n", finish);
 
