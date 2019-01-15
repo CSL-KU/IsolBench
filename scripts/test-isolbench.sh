@@ -119,6 +119,10 @@ elif grep "W3530" /proc/cpuinfo; then
     # nehalem
     llc_ws=512
     dram_ws=16384
+elif grep "Ryzen 3 2200G" /proc/cpuinfo; then
+    # ryzen apu
+    llc_ws=1024
+    dram_ws=16384
 else
     error "CPU specific 'llc_ws' and 'dram_ws' variables are not set"
 fi
