@@ -226,7 +226,7 @@ int main(int argc, char *argv[])
 			break;
 		}
 
-		if (iterations > 0 && i >= iterations)
+		if (iterations > 0 && i+1 >= iterations)
 			break;
 	}
 	printf("total sum = %ld\n", (long)sum);
