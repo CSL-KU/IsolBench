@@ -329,11 +329,11 @@ int main(int argc, char *argv[])
 		l_end = get_usecs();
 		l_duration = l_end - l_start;
 		if (period > 0) wait_period (&info);
-		if (verbose) fprintf(stderr, "\nTook %d us\n", l_duration);
+		if (verbose) fprintf(stderr, "\nJob %d Took %d us", j, l_duration);
 		if (jobs == 0 || j+1 >= jobs)
 			break;
 	}
-	printf("total sum = %ld\n", (long)sum);
+	printf("\ntotal sum = %ld\n", (long)sum);
 	quit(0);
 	return 0;
 }
