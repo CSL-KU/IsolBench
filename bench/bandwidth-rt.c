@@ -33,6 +33,7 @@
 #include <sys/resource.h>
 #include <getopt.h>
 #include <time.h>
+#include <pthread.h>
 
 /**************************************************************************
  * Public Definitions
@@ -44,6 +45,9 @@
 #  define DEFAULT_ALLOC_SIZE_KB 16384
 #endif
 
+#define MAX(a,b) ((a>b)?(a):(b))
+#define MIN(a,b) ((a>b)?(b):(a))
+
 /**************************************************************************
  * Public Types
  **************************************************************************/
@@ -51,6 +55,7 @@ enum access_type { READ, WRITE};
 
 struct periodic_info
 {
+	int id;
 	/* Opaque data */
 	int sig;
 	timer_t timer_id;	
@@ -64,9 +69,16 @@ struct periodic_info
 int g_mem_size = DEFAULT_ALLOC_SIZE_KB * 1024;	   /* memory size */
 int *g_mem_ptr = 0;		   /* pointer to allocated memory region */
 
+int g_nthreads = 1;
+int acc_type = READ;
+int iterations = 0;
+int jobs = 0;
+int period = 0; /* in ms */
+int verbose = 0;
+int cpuid = 0;
+
 volatile uint64_t g_nread = 0;	           /* number of bytes read */
 volatile unsigned int g_start;		   /* starting time */
-int cpuid = 0;
 
 /**************************************************************************
  * Public Functions
@@ -99,7 +111,8 @@ int64_t bench_read()
 	for ( i = 0; i < g_mem_size/4; i+=(CACHE_LINE_SIZE/4) ) {
 		sum += g_mem_ptr[i];
 	}
-	g_nread += g_mem_size;
+	// g_nread += g_mem_size;	
+	__atomic_fetch_add(&g_nread, g_mem_size, __ATOMIC_SEQ_CST);
 	return sum;
 }
 
@@ -110,7 +123,8 @@ int bench_write()
 	for ( i = 0; i < g_mem_size; i+=(CACHE_LINE_SIZE) ) {
 		ptr[i] = 0xff;
 	}
-	g_nread += g_mem_size;
+	// g_nread += g_mem_size;	
+	__atomic_fetch_add(&g_nread, g_mem_size, __ATOMIC_SEQ_CST);	
 	return 1;
 }
 
@@ -166,6 +180,48 @@ void wait_period (struct periodic_info *info)
         info->wakeups_missed += timer_getoverrun (info->timer_id);
 }
 
+void worker(void *param)
+{
+	int64_t sum = 0;
+	int i,j;
+	
+	struct periodic_info *info = (struct periodic_info *)param;
+
+	/*
+	 * actual memory access
+	 */
+	if (period > 0) make_periodic(period * 1000, info);
+	for (j = 0;; j++) {
+		unsigned int l_start, l_end, l_duration;
+		l_start = get_usecs();
+		for (i = 0;; i++) {
+			switch (acc_type) {
+			case READ:
+				sum += bench_read();
+				break;
+			case WRITE:
+				sum += bench_write();
+				break;
+			}
+			if (verbose > 1) fprintf(stderr, ".");
+			if (iterations > 0 && i+1 >= iterations)
+				break;
+		}
+		l_end = get_usecs();
+		l_duration = l_end - l_start;
+		if (period > 0) wait_period (info);
+		if (verbose) fprintf(stderr, "\nJob %d Took %d us", j, l_duration);
+		if (jobs == 0 || j+1 >= jobs)
+			break;
+	}
+	if (verbose) {
+		printf("thread %d completed: wakeup misses=%d\n",
+		       info->id, info->wakeups_missed);
+	}
+
+	printf("\ntotal sum = %ld\n", (long)sum);
+}
+	
 void usage(int argc, char *argv[])
 {
 	printf("Usage: $ %s [<option>]*\n\n", argv[0]);
@@ -183,39 +239,44 @@ void usage(int argc, char *argv[])
 	exit(1);
 }
 
+	
 int main(int argc, char *argv[])
 {
-	int64_t sum = 0;
 	unsigned finish = 5;
 	int prio = 0;        
 	int num_processors;
-	int acc_type = READ;
 	int opt;
 	cpu_set_t cmask;
-	int iterations = 0;
-	int jobs = 0;
-	int period = 0; /* in ms */
-	int verbose = 0;
-	int i, j;
+	int i;
 	struct sched_param param;
-	struct periodic_info info;
 	sigset_t alarm_sig;
+	pthread_t tid[32]; /* thread identifier */
+	struct periodic_info info[32];
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
 	
 	static struct option long_options[] = {
+		{"threads", required_argument, 0,  'n' },		
 		{"period",  required_argument, 0,  'l' },
 		{"jobs",    required_argument, 0,  'j' },
 		{"verbose", required_argument, 0,  'v' },
 		{0,         0,                 0,  0 }
 	};
 	int option_index = 0;
+
+	num_processors = sysconf(_SC_NPROCESSORS_CONF);
+	
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt_long(argc, argv, "m:a:t:c:r:p:i:j:l:hv:",
+	while ((opt = getopt_long(argc, argv, "m:n:a:t:c:r:p:i:j:l:hv:",
 				  long_options, &option_index)) != -1) {
 		switch (opt) {
 		case 'm': /* set memory size */
 			g_mem_size = 1024 * strtol(optarg, NULL, 0);
+			break;
+		case 'n': /* #of threads */
+			g_nthreads = strtol(optarg, NULL, 0);
 			break;
 		case 'a': /* set access type */
 			if (!strcmp(optarg, "read"))
@@ -232,16 +293,9 @@ int main(int argc, char *argv[])
 			
 		case 'c': /* set CPU affinity */
 			cpuid = strtol(optarg, NULL, 0);
-			num_processors = sysconf(_SC_NPROCESSORS_CONF);
-			CPU_ZERO(&cmask);
-			CPU_SET(cpuid % num_processors, &cmask);
-			if (sched_setaffinity(0, num_processors, &cmask) < 0)
-				perror("error");
-			else
-				fprintf(stderr, "assigned to cpu %d\n", cpuid);
 			break;
 
-		case 'r':
+		case 'r': /* set rt scheduler and its priority */
 			prio = strtol(optarg, NULL, 0);
 			param.sched_priority = prio; /* 1(low)- 99(high) for SCHED_FIFO or SCHED_RR
 						        0 for SCHED_OTHER or SCHED_BATCH */
@@ -289,9 +343,10 @@ int main(int argc, char *argv[])
 		g_mem_ptr[i] = i;
 
 	/* print experiment info before starting */
-	printf("memsize=%d KB, type=%s, cpuid=%d, iterations=%d, jobs=%d, period=%d\n",
+	printf("mem=%d KB, type=%s, nthreads=%d cpuid=%d, iterations=%d, jobs=%d, period=%d\n",
 	       g_mem_size/1024,
 	       ((acc_type==READ) ?"read": "write"),
+	       g_nthreads,
 	       cpuid,
 	       iterations,
                jobs,
@@ -305,36 +360,22 @@ int main(int argc, char *argv[])
 		alarm(finish);
 	}
 
-	/*
-	 * actual memory access
-	 */
-	if (period > 0) make_periodic(period * 1000, &info);
 	g_start = get_usecs();
-	for (j = 0;; j++) {
-		unsigned int l_start, l_end, l_duration;
-		l_start = get_usecs();
-		for (i = 0;; i++) {
-			switch (acc_type) {
-			case READ:
-				sum += bench_read();
-				break;
-			case WRITE:
-				sum += bench_write();
-				break;
-			}
-			if (verbose > 1) fprintf(stderr, ".");
-			if (iterations > 0 && i+1 >= iterations)
-				break;
-		}
-		l_end = get_usecs();
-		l_duration = l_end - l_start;
-		if (period > 0) wait_period (&info);
-		if (verbose) fprintf(stderr, "\nJob %d Took %d us", j, l_duration);
-		if (jobs == 0 || j+1 >= jobs)
-			break;
+	
+	/* thread affinity set */
+	for (i = 0; i < MIN(g_nthreads, num_processors); i++) {
+		pthread_create(&tid[i], &attr, (void *)worker, &info[i]);
+		CPU_ZERO(&cmask);
+		CPU_SET((cpuid + i) % num_processors, &cmask);
+		if (pthread_setaffinity_np(tid[i], sizeof(cpu_set_t), &cmask) < 0)
+			perror("error");
 	}
-	printf("\ntotal sum = %ld\n", (long)sum);
-	quit(0);
+
+	for (i = 0; i < MIN(g_nthreads, num_processors); i++) {
+		pthread_join(tid[i], NULL);
+		printf("thread %d finished\n", i);
+	}
+	
 	return 0;
 }
 
