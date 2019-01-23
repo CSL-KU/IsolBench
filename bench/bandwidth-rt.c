@@ -219,7 +219,7 @@ void worker(void *param)
 		       info->id, info->wakeups_missed);
 	}
 
-	printf("\ntotal sum = %ld\n", (long)sum);
+	printf("\ntotal sum = %" PRId64 "\n", sum);
 }
 	
 void usage(int argc, char *argv[])
@@ -355,6 +355,8 @@ int main(int argc, char *argv[])
 
 	/* set signals to terminate once time has been reached */
 	signal(SIGINT, &quit);
+	signal(SIGTERM, &quit);
+	signal(SIGHUP, &quit); 
 	if (finish > 0) {
 		signal(SIGALRM, &quit);
 		alarm(finish);
@@ -375,7 +377,9 @@ int main(int argc, char *argv[])
 		pthread_join(tid[i], NULL);
 		printf("thread %d finished\n", i);
 	}
-	
+
+	quit(0);
+
 	return 0;
 }
 
