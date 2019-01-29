@@ -76,6 +76,7 @@ int jobs = 0;
 int period = 0; /* in ms */
 int verbose = 0;
 int cpuid = 0;
+int thread_local = 0;
 
 volatile uint64_t g_nread = 0;	           /* number of bytes read */
 volatile unsigned int g_start;		   /* starting time */
@@ -183,9 +184,20 @@ void worker(void *param)
 {
 	int64_t sum = 0;
 	int i,j;
+	char *l_mem_ptr;
 	
 	struct periodic_info *info = (struct periodic_info *)param;
 
+	/*
+	 * allocate contiguous region of memory 
+	 */
+	if (thread_local) {
+		l_mem_ptr = malloc(g_mem_size);
+		memset(l_mem_ptr, 1, g_mem_size);
+	} else {
+		l_mem_ptr = g_mem_ptr;
+	}
+	
 	/*
 	 * actual memory access
 	 */
@@ -196,10 +208,10 @@ void worker(void *param)
 		for (i = 0;; i++) {
 			switch (acc_type) {
 			case READ:
-				sum += bench_read(g_mem_ptr);
+				sum += bench_read(l_mem_ptr);
 				break;
 			case WRITE:
-				sum += bench_write(g_mem_ptr);
+				sum += bench_write(l_mem_ptr);
 				break;
 			}
 			if (verbose > 1) fprintf(stderr, ".");
@@ -259,6 +271,7 @@ int main(int argc, char *argv[])
 		{"period",  required_argument, 0,  'l' },
 		{"jobs",    required_argument, 0,  'j' },
 		{"verbose", required_argument, 0,  'v' },
+		{"local",   no_argument,       0,  'o' },
 		{0,         0,                 0,  0 }
 	};
 	int option_index = 0;
@@ -268,7 +281,7 @@ int main(int argc, char *argv[])
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt_long(argc, argv, "m:n:a:t:c:r:p:i:j:l:hv:",
+	while ((opt = getopt_long(argc, argv, "m:n:a:t:c:r:p:i:j:l:hv:o",
 				  long_options, &option_index)) != -1) {
 		switch (opt) {
 		case 'm': /* set memory size */
@@ -328,22 +341,22 @@ int main(int argc, char *argv[])
 		case 'v':
 			verbose = strtol(optarg, NULL, 0);
 			break;
+		case 'o':
+			thread_local = 1;
+			break;
 		}
 	}
 
 	/*
 	 * allocate contiguous region of memory 
-	 */ 
+	 */
 	g_mem_ptr = malloc(g_mem_size);
-
 	memset(g_mem_ptr, 1, g_mem_size);
 
-	for (i = 0; i < g_mem_size; i++)
-		g_mem_ptr[i] = (char)i;
-
 	/* print experiment info before starting */
-	printf("mem=%d KB, type=%s, nthreads=%d cpuid=%d, iterations=%d, jobs=%d, period=%d\n",
+	printf("mem=%d KB (%s), type=%s, nthreads=%d cpuid=%d, iterations=%d, jobs=%d, period=%d\n",
 	       g_mem_size/1024,
+	       (thread_local)? "private":"shared",
 	       ((acc_type==READ) ?"read": "write"),
 	       g_nthreads,
 	       cpuid,
