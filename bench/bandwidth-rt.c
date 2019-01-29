@@ -70,7 +70,7 @@ int g_mem_size = DEFAULT_ALLOC_SIZE_KB * 1024;	   /* memory size */
 char *g_mem_ptr = 0;		   /* pointer to allocated memory region */
 
 int g_nthreads = 1;
-volatile int g_join = 0;
+volatile int g_njoin = 0;
 int acc_type = READ;
 int iterations = 0;
 int jobs = 0;
@@ -199,9 +199,9 @@ void worker(void *param)
 		l_mem_ptr = g_mem_ptr;
 	}
 
-	__atomic_fetch_add(&g_join, 1, __ATOMIC_SEQ_CST);
-	while (g_join < g_nthreads);
-	
+	__atomic_fetch_add(&g_njoin, 1, __ATOMIC_SEQ_CST);
+	while (g_njoin < g_nthreads); // busy wait until all join
+
 	/*
 	 * actual memory access
 	 */
