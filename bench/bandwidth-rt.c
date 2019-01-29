@@ -67,7 +67,7 @@ struct periodic_info
  * Global Variables
  **************************************************************************/
 int g_mem_size = DEFAULT_ALLOC_SIZE_KB * 1024;	   /* memory size */
-int *g_mem_ptr = 0;		   /* pointer to allocated memory region */
+char *g_mem_ptr = 0;		   /* pointer to allocated memory region */
 
 int g_nthreads = 1;
 int acc_type = READ;
@@ -104,24 +104,23 @@ void quit(int param)
 	exit(0);
 }
 
-int64_t bench_read()
+int64_t bench_read(char *mem_ptr)
 {
 	int i;	
 	int64_t sum = 0;
-	for ( i = 0; i < g_mem_size/4; i+=(CACHE_LINE_SIZE/4) ) {
-		sum += g_mem_ptr[i];
+	for ( i = 0; i < g_mem_size; i+=(CACHE_LINE_SIZE) ) {
+		sum += mem_ptr[i];
 	}
 	// g_nread += g_mem_size;	
 	__atomic_fetch_add(&g_nread, g_mem_size, __ATOMIC_SEQ_CST);
 	return sum;
 }
 
-int bench_write()
+int bench_write(char *mem_ptr)
 {
 	register int i;
-	char *ptr = (char *)g_mem_ptr;
 	for ( i = 0; i < g_mem_size; i+=(CACHE_LINE_SIZE) ) {
-		ptr[i] = 0xff;
+		mem_ptr[i] = 0xff;
 	}
 	// g_nread += g_mem_size;	
 	__atomic_fetch_add(&g_nread, g_mem_size, __ATOMIC_SEQ_CST);	
@@ -197,10 +196,10 @@ void worker(void *param)
 		for (i = 0;; i++) {
 			switch (acc_type) {
 			case READ:
-				sum += bench_read();
+				sum += bench_read(g_mem_ptr);
 				break;
 			case WRITE:
-				sum += bench_write();
+				sum += bench_write(g_mem_ptr);
 				break;
 			}
 			if (verbose > 1) fprintf(stderr, ".");
@@ -335,12 +334,12 @@ int main(int argc, char *argv[])
 	/*
 	 * allocate contiguous region of memory 
 	 */ 
-	g_mem_ptr = (int *)malloc(g_mem_size);
+	g_mem_ptr = malloc(g_mem_size);
 
-	memset((char *)g_mem_ptr, 1, g_mem_size);
+	memset(g_mem_ptr, 1, g_mem_size);
 
-	for (i = 0; i < g_mem_size / sizeof(int); i++)
-		g_mem_ptr[i] = i;
+	for (i = 0; i < g_mem_size; i++)
+		g_mem_ptr[i] = (char)i;
 
 	/* print experiment info before starting */
 	printf("mem=%d KB, type=%s, nthreads=%d cpuid=%d, iterations=%d, jobs=%d, period=%d\n",
