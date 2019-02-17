@@ -1,14 +1,11 @@
 /**
  *
- * Copyright (C) 2012  Heechul Yun <heechul@illinois.edu>
- *               2012  Zheng <zpwu@uwaterloo.ca>
+ * Copyright (C) 2019  Heechul Yun <heechul.yun@ku.edu>
  *
  * This file is distributed under the University of Illinois Open Source
  * License. See LICENSE.TXT for details.
  *
  */
-
-/* clang -S -mllvm --x86-asm-syntax=intel ./bandwidth.c */
 
 /**************************************************************************
  * Conditional Compilation Options
