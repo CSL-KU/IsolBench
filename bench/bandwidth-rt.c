@@ -242,15 +242,18 @@ void usage(int argc, char *argv[])
 	printf("Usage: $ %s [<option>]*\n\n", argv[0]);
 	printf("-m: memory size in KB. deafult=8192\n");
 	printf("-a: access type - read, write. default=read\n");
-	printf("-n: addressing pattern - Seq, Row, Bank. default=Seq\n");
+	printf("-n: number of threads. default=1 \n");
 	printf("-t: time to run in sec. 0 means indefinite. default=5. \n");
 	printf("-c: CPU to run.\n");
+	printf("-r: real-time priority (use SCHED_FIFO).\n");
+	printf("-p: nice value (use CFS).\n");
 	printf("-i: iterations. 0 means intefinite. default=0\n");
-	printf("-p: priority\n");
-	printf("-l: log label. use together with -f\n");
-	printf("-f: log file name\n");
+	printf("-j: jobs. default=0\n");
+	printf("-l: job period (in ms)\n");
+	printf("-v: debug level (in ms)\n");
+	printf("-o: per-thread allocation\n");
 	printf("-h: help\n");
-	printf("\nExamples: \n$ bandwidth -m 8192 -a read -t 1 -c 2\n  <- 8MB read for 1 second on CPU 2\n");
+	printf("\nExamples: \n$ bandwidth-rt -m 8192 -c 2 -a read -i 10 -j 100 -l 10 -c 2\n  <- 8MB read*10 iterations per job, for 100 jobs with 10ms period, on CPU 2\n");
 	exit(1);
 }
 
