@@ -2,6 +2,9 @@
  *
  * Copyright (C) 2019  Heechul Yun <heechul.yun@ku.edu>
  *
+ * Periodic real-time task related functions are from:
+ *    http://www.2net.co.uk/tutorial/periodic_threads
+ *
  * This file is distributed under the University of Illinois Open Source
  * License. See LICENSE.TXT for details.
  *
