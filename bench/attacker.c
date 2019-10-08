@@ -59,6 +59,7 @@
  * Global Variables
  **************************************************************************/
 long g_mem_size;
+
 double g_fraction_of_physical_memory = 0.2;
 int g_cache_num_ways = 16;
 
@@ -70,10 +71,15 @@ int g_pagemap_fd;
 
 int g_debug = 0;
 
-long *corun_list[MAX_CPU][MAX_MLP];
-volatile long long g_count[MAX_CPU]; 
 struct timespec g_start, g_end;
+ 
 int g_mlp=6;
+static volatile long* g_list[MAX_CPU][MAX_MLP];
+volatile long long g_count[MAX_CPU];
+int g_repeat = 1000000;
+
+volatile int g_quit = 0; 
+pthread_barrier_t g_barrier;
 
 /**************************************************************************
  * Public Function Prototypes
@@ -185,6 +191,7 @@ long *create_list(ulong match_mask, int max_shift, int min_count)
 	for (long i = 0; i < g_mem_size; i += 0x1000) {
 		vaddr = (ulong)(g_mapping + i) + (match_mask & 0xFFF);
 		paddr = g_frame_phys[i/0x1000] + (match_mask & 0xFFF);
+		
 		if (!((paddr & ((1<<max_shift) - 1)) ^ match_mask)) {
 			if (*(ulong *)vaddr > 0)
 				continue;
@@ -210,58 +217,74 @@ long *create_list(ulong match_mask, int max_shift, int min_count)
 	return NULL;
 }
 
-int run(long *list, int count)
+long run(int cpu, long iter, int mlp)
 {
-	long i = 0;
-	while (list && i++ < count) {
-		list = (long *)*list;
+	for (long i = 0; i < iter; i++) {
+		switch (mlp) {
+		case 10:
+			g_list[cpu][9] = (long *)(*g_list[cpu][9]);
+		case 9:
+			g_list[cpu][8] = (long *)(*g_list[cpu][8]);
+		case 8:
+			g_list[cpu][7] = (long *)(*g_list[cpu][7]);
+		case 7:
+			g_list[cpu][6] = (long *)(*g_list[cpu][6]);
+		case 6:
+			g_list[cpu][5] = (long *)(*g_list[cpu][5]);
+		case 5:
+			g_list[cpu][4] = (long *)(*g_list[cpu][4]);
+		case 4:
+			g_list[cpu][3] = (long *)(*g_list[cpu][3]);
+		case 3:
+			g_list[cpu][2] = (long *)(*g_list[cpu][2]);
+		case 2:
+			g_list[cpu][1] = (long *)(*g_list[cpu][1]);
+		case 1:
+			g_list[cpu][0] = (long *)(*g_list[cpu][0]);
+		}
+		g_count[cpu] += mlp;
+		
+
 	}
-	return i;
+	return g_count[cpu];
 }
+
 
 void  worker(void *param)
 {
 	int cpuid = (int)param;
-
+	long int naccess = 0; 
         pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
         pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	
 	printf("worker thread at %d begins\n", cpuid);
-
+	
+	/*synchronize with a barrier */
+	pthread_barrier_wait(&g_barrier);	
 	while(1) {
-#if 1
-		for (int j = 0; j < g_mlp; j++) {
-			corun_list[cpuid][j] = (long *)*corun_list[cpuid][j];
-		}
-#else
-		corun_list[cpuid][0] = (long *)*corun_list[cpuid][0];
-		corun_list[cpuid][1] = (long *)*corun_list[cpuid][1];
-		corun_list[cpuid][2] = (long *)*corun_list[cpuid][2];
-		corun_list[cpuid][3] = (long *)*corun_list[cpuid][3];
-		corun_list[cpuid][4] = (long *)*corun_list[cpuid][4];
-		corun_list[cpuid][5] = (long *)*corun_list[cpuid][5];
-#endif
-		g_count[cpuid] += g_mlp;
+		naccess = run(cpuid, g_repeat, g_mlp);
 	}
+	printf("cpu%d: naccess=%ld\n", cpuid, naccess);
 }
-
 
 void quit(int param)
 {
-	exit(0);
+	printf("got a signal to quit\n");
+	g_quit = 1; 
 }
 
 int main(int argc, char* argv[])
 {
         cpu_set_t cmask;
-	int num_processors, n_corun = 1;
+	int num_processors, n_corun = 0;
 	int opt;
-	int repeat = 1000000;
 	
 	pthread_t tid[16]; /* thread identifier */
 	pthread_attr_t attr;
-	pthread_attr_init(&attr);
+	
 	num_processors = sysconf(_SC_NPROCESSORS_CONF);
+	pthread_attr_init(&attr);	
+	
 	int finish = 5;
 	
 	/*
@@ -285,8 +308,9 @@ int main(int argc, char* argv[])
 			n_corun = strtol(optarg, NULL, 0);
 			break;
 		case 'i': /* iterations */
-			repeat = strtol(optarg, NULL, 0);
-			fprintf(stderr, "repeat=%d\n", repeat);
+			g_repeat = strtol(optarg, NULL, 0);
+			fprintf(stderr, "repeat=%d\n", g_repeat);
+			finish = 0;
 			break;
 		case 'l': /* MLP */
 			g_mlp = strtol(optarg, NULL, 0);
@@ -318,45 +342,55 @@ int main(int argc, char* argv[])
 	       g_cache_num_ways, g_fraction_of_physical_memory, g_mlp);
 	
 	/* create lists */
-	for (int i = 1; i < MIN(1+n_corun, num_processors); i++) {
+	for (int i = 0; i < MIN(1+n_corun, num_processors); i++) {
 		for (int j = 0; j < g_mlp; j++) {
-			corun_list[i][j] = create_list(j << 13, MAX_BIT, g_cache_num_ways*2);
+			g_list[i][j] = create_list(j << 13, MAX_BIT, g_cache_num_ways*2);
 		}
 	}
 
-	/* thread affinity set */
-	clock_gettime(CLOCK_REALTIME, &g_start);
+
+	signal(SIGINT, &quit);
+	if (finish > 0) {
+		signal(SIGALRM, &quit);		
+		alarm(finish);
+	}
+
+	/* barrier */
+	if (n_corun > 0) pthread_barrier_init(&g_barrier, NULL, n_corun);
+	
 	for (int i = 1; i < MIN(1+n_corun, num_processors); i++) {
 		pthread_create(&tid[i], &attr, (void *)worker, (void *)i);
                 CPU_ZERO(&cmask);
 		CPU_SET((g_cpuid + i) % num_processors, &cmask);
+		/* thread affinity set */
 		if (pthread_setaffinity_np(tid[i], sizeof(cpu_set_t), &cmask) < 0)
 			perror("error");
 	}
-
-	sigset_t sigset;
-	int sig;
-	sigemptyset(&sigset);
-	sigaddset(&sigset, SIGINT);
-	sigaddset(&sigset, SIGALRM);	
-	sigprocmask(SIG_BLOCK, &sigset, NULL);
-
-	if (finish > 0) {
-		alarm(finish);
-	}
+	if (n_corun > 0) pthread_barrier_wait(&g_barrier);
 	
-	int res = sigwait(&sigset, &sig);
-	if (res == 0) {
-		printf("got signal %d\n", sig);
-	}
+	/* start counting */
+	clock_gettime(CLOCK_REALTIME, &g_start);
 
-	long long g_nread = 0;
+
+	/* main local thread */
+	g_count[0] += run(0, g_repeat, g_mlp);
+
+
+	/* cancel other threads */
 	for (int i = 1; i < MIN(1+n_corun, num_processors); i++) {
 		pthread_cancel(tid[i]);
-		g_nread += (g_count[i] * CACHE_LINE_SIZE);
 	}
 
+
+	/* end counting */
 	clock_gettime(CLOCK_REALTIME, &g_end);
+
+
+	/* calculate */
+	long long g_nread = 0;
+	for (int i = 0; i < MIN(1+n_corun, num_processors); i++) {
+		g_nread += (g_count[i] * CACHE_LINE_SIZE);
+	}
 	uint64_t dur = get_elapsed(&g_start, &g_end);
 	float dur_in_sec = dur_in_sec = (float)dur / 1000000000;
 	
