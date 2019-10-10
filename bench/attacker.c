@@ -217,7 +217,7 @@ long *create_list(ulong match_mask, int max_shift, int min_count)
 	return NULL;
 }
 
-long run(int cpu, long iter, int mlp)
+void run(int cpu, long iter, int mlp)
 {
 	for (long i = 0; i < iter; i++) {
 		switch (mlp) {
@@ -246,14 +246,12 @@ long run(int cpu, long iter, int mlp)
 		
 
 	}
-	return g_count[cpu];
 }
 
 
 void  worker(void *param)
 {
 	int cpuid = (int)param;
-	long int naccess = 0; 
         pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
         pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 	
@@ -262,9 +260,9 @@ void  worker(void *param)
 	/*synchronize with a barrier */
 	pthread_barrier_wait(&g_barrier);	
 	while(1) {
-		naccess = run(cpuid, g_repeat, g_mlp);
+		run(cpuid, g_repeat, g_mlp);
 	}
-	printf("cpu%d: naccess=%ld\n", cpuid, naccess);
+	printf("cpu%d: naccess=%lld\n", cpuid, g_count[cpuid]);
 }
 
 void quit(int param)
@@ -356,10 +354,10 @@ int main(int argc, char* argv[])
 	}
 
 	/* barrier */
-	if (n_corun > 0) pthread_barrier_init(&g_barrier, NULL, n_corun);
+	if (n_corun > 0) pthread_barrier_init(&g_barrier, NULL, n_corun + 1);
 	
-	for (int i = 1; i < MIN(1+n_corun, num_processors); i++) {
-		pthread_create(&tid[i], &attr, (void *)worker, (void *)i);
+	for (int i = 0; i < MIN(1+n_corun, num_processors); i++) {
+		if (i > 0) pthread_create(&tid[i], &attr, (void *)worker, (void *)i);
                 CPU_ZERO(&cmask);
 		CPU_SET((g_cpuid + i) % num_processors, &cmask);
 		/* thread affinity set */
@@ -373,7 +371,7 @@ int main(int argc, char* argv[])
 
 
 	/* main local thread */
-	g_count[0] += run(0, g_repeat, g_mlp);
+	run(0, g_repeat, g_mlp);
 
 
 	/* cancel other threads */
@@ -387,14 +385,16 @@ int main(int argc, char* argv[])
 
 
 	/* calculate */
+	uint64_t dur = get_elapsed(&g_start, &g_end);
+	float dur_in_sec = dur_in_sec = (float)dur / 1000000000;
+
 	long long g_nread = 0;
 	for (int i = 0; i < MIN(1+n_corun, num_processors); i++) {
 		g_nread += (g_count[i] * CACHE_LINE_SIZE);
+		printf("g_count[%d] = %lld, %.2f MB/s\n", i, g_count[i],
+		       (float)g_count[i]*CACHE_LINE_SIZE / dur_in_sec / 1024 / 1024);
 	}
-	uint64_t dur = get_elapsed(&g_start, &g_end);
-	float dur_in_sec = dur_in_sec = (float)dur / 1000000000;
-	
-	printf("g_nread(bytes read) = %lld\n", (long long)g_nread);
+	printf("g_nread (bytes read) = %lld\n", (long long)g_nread);
 	printf("elapsed = %.2f sec\n", dur_in_sec);
 	float bw = (float)g_nread / dur_in_sec / 1024 / 1024;
 	printf("Total B/W = %.2f MB/s | ", bw);
