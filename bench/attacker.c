@@ -41,7 +41,7 @@
  **************************************************************************/
 #define MAX_BIT   (18)                  // [27:23] bits are used for iterations
 #define MAX_CPU   (16)
-#define MAX_MLP   (6)
+#define MAX_MLP   (10)
 #define CACHE_LINE_SIZE (64)
 
 #define MAX(a,b) ((a>b)?(a):(b))
@@ -74,7 +74,7 @@ int g_debug = 0;
 struct timespec g_start, g_end;
  
 int g_mlp=6;
-static volatile long* g_list[MAX_CPU][MAX_MLP];
+static long* g_list[MAX_CPU][MAX_MLP];
 volatile long long g_count[MAX_CPU];
 int g_repeat = 1000000;
 
@@ -222,28 +222,27 @@ void run(int cpu, long iter, int mlp)
 	for (long i = 0; i < iter; i++) {
 		switch (mlp) {
 		case 10:
-			g_list[cpu][9] = (long *)(*g_list[cpu][9]);
+			g_list[cpu][9] = (long *)*(volatile long *)g_list[cpu][9];
 		case 9:
-			g_list[cpu][8] = (long *)(*g_list[cpu][8]);
+			g_list[cpu][8] = (long *)*(volatile long *)g_list[cpu][8];
 		case 8:
-			g_list[cpu][7] = (long *)(*g_list[cpu][7]);
+			g_list[cpu][7] = (long *)*(volatile long *)g_list[cpu][7];
 		case 7:
-			g_list[cpu][6] = (long *)(*g_list[cpu][6]);
+			g_list[cpu][6] = (long *)*(volatile long *)g_list[cpu][6];
 		case 6:
-			g_list[cpu][5] = (long *)(*g_list[cpu][5]);
+			g_list[cpu][5] = (long *)*(volatile long *)g_list[cpu][5];
 		case 5:
-			g_list[cpu][4] = (long *)(*g_list[cpu][4]);
+			g_list[cpu][4] = (long *)*(volatile long *)g_list[cpu][4];
 		case 4:
-			g_list[cpu][3] = (long *)(*g_list[cpu][3]);
+			g_list[cpu][3] = (long *)*(volatile long *)g_list[cpu][3];
 		case 3:
-			g_list[cpu][2] = (long *)(*g_list[cpu][2]);
+			g_list[cpu][2] = (long *)*(volatile long *)g_list[cpu][2];
 		case 2:
-			g_list[cpu][1] = (long *)(*g_list[cpu][1]);
+			g_list[cpu][1] = (long *)*(volatile long *)g_list[cpu][1];
 		case 1:
-			g_list[cpu][0] = (long *)(*g_list[cpu][0]);
+			g_list[cpu][0] = (long *)*(volatile long *)g_list[cpu][0];
 		}
-		g_count[cpu] += mlp;
-		
+		g_count[cpu] += mlp;		
 
 	}
 }
