@@ -39,7 +39,7 @@
 /**************************************************************************
  * Public Definitions
  **************************************************************************/
-#define MAX_BIT   (18)                  // [27:23] bits are used for iterations
+#define MAX_BIT   (17)                  // [27:23] bits are used for iterations
 #define MAX_CPU   (16)
 #define MAX_MLP   (10)
 #define CACHE_LINE_SIZE (64)
@@ -50,6 +50,7 @@
 
 #define FATAL do { fprintf(stderr, "Error at line %d, file %s (%d) [%s]\n", \
    __LINE__, __FILE__, errno, strerror(errno)); exit(1); } while(0)
+
 
 /**************************************************************************
  * Public Types
@@ -81,9 +82,132 @@ int g_repeat = 1000000;
 volatile int g_quit = 0; 
 pthread_barrier_t g_barrier;
 
+// static unsigned long l1_bitmask   = 0x03000; //    | --,--,13,12 |  cortex-a15
+static unsigned long l2_bitmask   = 0x1f000; // 16 | 15,14,13,12 |  cortex-a15
+static unsigned long dram_bitmask = 0x1e000; // 16 | 15,14,13,-- |  cortex-a15
+
+#ifdef __LP64
+#define BITS_PER_LONG 64
+#else
+#define BITS_PER_LONG 32
+#endif
+#define BITOP_WORD(nr)		((nr) / BITS_PER_LONG)
+#define PAGE_SHIFT 12
+
 /**************************************************************************
  * Public Function Prototypes
  **************************************************************************/
+/**
+ * __ffs - find first set bit in word
+ * @word: The word to search
+ *
+ * Undefined if no bit exists, so code should check against 0 first.
+ */
+#if 0
+static inline unsigned long __ffs(unsigned long word)
+{
+	asm("bsf %1,%0"
+		: "=r" (word)
+		: "rm" (word));
+	return word;
+}
+#else
+static __always_inline unsigned long __ffs(unsigned long word)
+{
+        int num = 0;
+
+#if BITS_PER_LONG == 64
+        if ((word & 0xffffffff) == 0) {
+                num += 32;
+                word >>= 32;
+        }
+#endif
+        if ((word & 0xffff) == 0) {
+                num += 16;
+                word >>= 16;
+        }
+        if ((word & 0xff) == 0) {
+                num += 8;
+                word >>= 8;
+        }
+        if ((word & 0xf) == 0) {
+                num += 4;
+                word >>= 4;
+        }
+        if ((word & 0x3) == 0) {
+                num += 2;
+                word >>= 2;
+        }
+        if ((word & 0x1) == 0)
+                num += 1;
+        return num;
+}
+#endif
+
+
+/*
+ * Find the next set bit in a memory region.
+ */
+unsigned long find_next_bit(const unsigned long *addr, unsigned long size,
+			    unsigned long offset)
+{
+	const unsigned long *p = addr + BITOP_WORD(offset);
+	unsigned long result = offset & ~(BITS_PER_LONG-1);
+	unsigned long tmp;
+
+	if (offset >= size)
+		return size;
+	size -= result;
+	offset %= BITS_PER_LONG;
+	if (offset) {
+		tmp = *(p++);
+		tmp &= (~0UL << offset);
+		if (size < BITS_PER_LONG)
+			goto found_first;
+		if (tmp)
+			goto found_middle;
+		size -= BITS_PER_LONG;
+		result += BITS_PER_LONG;
+	}
+	while (size & ~(BITS_PER_LONG-1)) {
+		if ((tmp = *(p++)))
+			goto found_middle;
+		result += BITS_PER_LONG;
+		size -= BITS_PER_LONG;
+	}
+	if (!size)
+		return result;
+	tmp = *p;
+
+found_first:
+	tmp &= (~0UL >> (BITS_PER_LONG - size));
+	if (tmp == 0UL)		/* Are any bits set? */
+		return result + size;	/* Nope. */
+found_middle:
+	return result + __ffs(tmp);
+}
+
+#define find_first_bit(addr, size) find_next_bit((addr), (size), 0)
+
+#define for_each_set_bit(bit, addr, size) \
+	for ((bit) = find_first_bit((addr), (size));		\
+	     (bit) < (size);					\
+	     (bit) = find_next_bit((addr), (size), (bit) + 1))
+
+int paddr_to_color(unsigned long mask, unsigned long paddr)
+{
+	int color = 0;
+	int idx = 0;
+	int c;
+	for_each_set_bit(c, &mask, sizeof(unsigned long) * 8) {
+		if ((paddr >> (c)) & 0x1)
+			color |= (1<<idx);
+		idx++;
+	}
+	return color;
+}
+
+
 uint64_t get_elapsed(struct timespec *start, struct timespec *end)
 {
 	uint64_t dur;
@@ -133,7 +257,7 @@ void setupMapping() {
 	
 	/* map */
 	g_mapping = mmap(NULL, g_mem_size, PROT_READ | PROT_WRITE,
-		       MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+		       MAP_POPULATE | MAP_ANONYMOUS | MAP_PRIVATE | MAP_HUGETLB, -1, 0);
 	assert(g_mapping != (void *) -1);
 
 	/* page virt -> phys translation table */
@@ -146,7 +270,10 @@ void setupMapping() {
 		*((ulong *)vaddr) = 0;
 		paddr = getPhysicalAddr(vaddr);
 		g_frame_phys[i/0x1000] = paddr;
-		// printf("vaddr-paddr: %p-%p\n", (void *)vaddr, (void *)paddr);
+		if (g_debug) printf("vaddr-paddr: %p-%p bank: %d l2: %d\n",
+		       (void *)vaddr, (void *)paddr,
+		       paddr_to_color(dram_bitmask, paddr),
+		       paddr_to_color(l2_bitmask, paddr));
 	}
 	printf("allocation complete.\n");
 }
@@ -186,7 +313,7 @@ long *create_list(ulong match_mask, int max_shift, int min_count)
 	long *list_curr = NULL;
 	long *list_head = NULL;
 	
-	// printf("mask: 0x%lx, shift: %d\n", match_mask, max_shift);
+	printf("mask: 0x%lx, shift: %d\n", match_mask, max_shift);
 	
 	for (long i = 0; i < g_mem_size; i += 0x1000) {
 		vaddr = (ulong)(g_mapping + i) + (match_mask & 0xFFF);
@@ -196,7 +323,11 @@ long *create_list(ulong match_mask, int max_shift, int min_count)
 			if (*(ulong *)vaddr > 0)
 				continue;
 			/* found a match */
-			if (g_debug) printf("vaddr-paddr: %p-%p\n", (void *)vaddr, (void *)paddr);
+			if (g_debug) printf("vaddr-paddr: %p-%p bank: %d l2: %d\n",
+					    (void *)vaddr, (void *)paddr,
+					    paddr_to_color(dram_bitmask, paddr),
+					    paddr_to_color(l2_bitmask, paddr));
+			
 			count ++;
 			
 			if (count == 1) {
@@ -287,8 +418,12 @@ int main(int argc, char* argv[])
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt(argc, argv, "w:p:c:d:n:i:l:t:h")) != -1) {
+	while ((opt = getopt(argc, argv, "w:p:c:d:n:i:l:t:hk:")) != -1) {
 		switch (opt) {
+                case 'k':
+                        dram_bitmask = strtol(optarg, NULL, 0);
+                        printf("dram_bitmask = 0x%lx\n", dram_bitmask);
+			break;
 		case 'w': /* cache num ways */
 			g_cache_num_ways = strtol(optarg, NULL, 0);
 			break;
@@ -341,7 +476,8 @@ int main(int argc, char* argv[])
 	/* create lists */
 	for (int i = 0; i < MIN(1+n_corun, num_processors); i++) {
 		for (int j = 0; j < g_mlp; j++) {
-			g_list[i][j] = create_list(j << 13, MAX_BIT, g_cache_num_ways*2);
+			// g_list[i][j] = create_list(j << 13, MAX_BIT, g_cache_num_ways*2);
+			g_list[i][j] = create_list(0, MAX_BIT, g_cache_num_ways*2);
 		}
 	}
 
@@ -364,14 +500,14 @@ int main(int argc, char* argv[])
 			perror("error");
 	}
 	if (n_corun > 0) pthread_barrier_wait(&g_barrier);
+
+	// return 0;
 	
 	/* start counting */
 	clock_gettime(CLOCK_REALTIME, &g_start);
 
-
 	/* main local thread */
 	run(0, g_repeat, g_mlp);
-
 
 	/* cancel other threads */
 	for (int i = 1; i < MIN(1+n_corun, num_processors); i++) {
