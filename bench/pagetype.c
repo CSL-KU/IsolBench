@@ -75,6 +75,7 @@
 #define KPF_HWPOISON		19
 #define KPF_NOPAGE		20
 #define KPF_KSM			21
+#define KPF_THP                 22
 
 /* [32-] kernel hacking assistances */
 #define KPF_RESERVED		32
@@ -124,7 +125,8 @@ static char *page_flag_names[] = {
 	[KPF_HWPOISON]		= "X:hwpoison",
 	[KPF_NOPAGE]		= "n:nopage",
 	[KPF_KSM]		= "x:ksm",
-
+	[KPF_THP]		= "h:thp",
+	
 	[KPF_RESERVED]		= "r:reserved",
 	[KPF_MLOCKED]		= "m:mlocked",
 	[KPF_MAPPEDTODISK]	= "d:mappedtodisk",
@@ -441,7 +443,7 @@ static char *page_flag_name(uint64_t flags)
 		present = (flags >> i) & 1;
 		if (!page_flag_names[i]) {
 			if (present)
-				fatal("unkown flag bit %d\n", i);
+				printf("unkown flag bit %d\n", i);
 			continue;
 		}
 		buf[j++] = present ? page_flag_names[i][0] : '_';
@@ -506,7 +508,7 @@ static void show_page(unsigned long voffset,
 {
 	if (opt_pid)
 		printf("%lx\t", voffset);
-	printf("%lx\tcolor=%d\t%s\n", offset, pfn_to_color(offset), page_flag_name(flags));
+	printf("%lx\tcolor=%2d\t%s\n", offset, pfn_to_color(offset), page_flag_name(flags));
 }
 
 static void show_summary(void)
