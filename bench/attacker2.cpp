@@ -226,11 +226,11 @@ int paddr_to_color(unsigned long mask, unsigned long paddr)
 /**************************************************************************
  * Implementation
  **************************************************************************/
-long run(long iter, int mlp)
+int64_t run(int64_t iter, int mlp)
 {
-	long cnt = 0;
+	int64_t cnt = 0;
 
-	for (long i = 0; i < iter; i++) {
+	for (int64_t i = 0; i < iter; i++) {
 		switch (mlp) {
 		case 32:
 			next[31] = list[31][next[31]];
@@ -464,7 +464,7 @@ int main(int argc, char* argv[])
 	clock_gettime(CLOCK_REALTIME, &start);
 	/* actual access */
 	if (acc_type == READ)
-		naccess = run(repeat * ws, mlp);
+		naccess = run((int64_t)repeat * ws, mlp);
 #if 0
 	else
 		naccess = run_write(repeat * ws, mlp);
