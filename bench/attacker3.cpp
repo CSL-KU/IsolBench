@@ -68,7 +68,6 @@ enum access_type { READ, WRITE};
 static int g_mem_size = (DEFAULT_ALLOC_SIZE_KB*1024);
 static int* list[MAX_MLP];
 static int next[MAX_MLP];
-int g_pagemap_fd;
 
 static unsigned long l2_bitmask   = 0x1f000; // 16 | 15,14,13,12 |  cortex-a15
 static unsigned long dram_bitmask = 0x1e000; // 16 | 15,14,13,-- |  cortex-a15
@@ -83,33 +82,6 @@ uint64_t get_elapsed(struct timespec *start, struct timespec *end)
 	dur = ((uint64_t)end->tv_sec * 1000000000 + end->tv_nsec) - 
 		((uint64_t)start->tv_sec * 1000000000 + start->tv_nsec);
 	return dur;
-}
-
-size_t frameNumberFromPagemap(size_t value) {
-	return value & ((1ULL << 54) - 1);
-}
-
-// ----------------------------------------------
-ulong  getPhysicalAddr(ulong virtual_addr)
-{
-	u_int64_t value;
-	off_t offset = (virtual_addr / 4096) * sizeof(value);
-	int got = pread(g_pagemap_fd, &value, 8, offset);
-	//printf("vaddr=%lu, value=0x%llx, got=%d\n", virtual_addr, value, got);
-	assert(got == 8);
-
-	// Check the "page present" flag.
-	assert(value & (1ULL << 63));
-
-	ulong frame_num = frameNumberFromPagemap(value);
-	return (frame_num * 4096) | (virtual_addr & (4095));
-}
-
-// ----------------------------------------------
-void initPagemap()
-{
-	g_pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
-	assert(g_pagemap_fd >= 0);
 }
 
 // ----------------------------------------------
@@ -431,8 +403,6 @@ int main(int argc, char* argv[])
 
 	std::srand (0);
 	std::vector<int> myvector;
-
-	initPagemap();
 	
 	/*
 	 * get command line options 
@@ -522,14 +492,13 @@ int main(int argc, char* argv[])
 		// set some values:
 		for (int i=0; i<orig_ws; i++) {
 			ulong vaddr = (ulong)&memchunk[i*CACHE_LINE_SIZE/4];
-			ulong paddr = getPhysicalAddr(vaddr);
 #if 0
 			printf("vaddr-paddr: %p-%p bank: %d l2: %d\n",
 			       (void *)vaddr, (void *)paddr,
 			       paddr_to_color(dram_bitmask, paddr),
 			       paddr_to_color(l2_bitmask, paddr));
 #endif			
-			if (paddr_to_color(dram_bitmask, paddr) == 0) // color 0 only
+			if (paddr_to_color(dram_bitmask, vaddr) == 0) // color 0 only
 				myvector.push_back(i);
 		}
 
