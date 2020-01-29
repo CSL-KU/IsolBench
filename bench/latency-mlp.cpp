@@ -76,11 +76,11 @@ uint64_t get_elapsed(struct timespec *start, struct timespec *end)
 /**************************************************************************
  * Implementation
  **************************************************************************/
-long run_write(long iter, int mlp)
+int64_t run_write(int64_t iter, int mlp)
 {
-	long cnt = 0;
+	int64_t cnt = 0;
 
-	for (long i = 0; i < iter; i++) {
+	for (int64_t i = 0; i < iter; i++) {
 		switch (mlp) {
 		case 32:
 			list[31][next[31]+1] = 0xff;
@@ -186,11 +186,11 @@ long run_write(long iter, int mlp)
 }
 
 
-long run(long iter, int mlp)
+int64_t run(int64_t iter, int mlp)
 {
-	long cnt = 0;
+	int64_t cnt = 0;
 
-	for (long i = 0; i < iter; i++) {
+	for (int64_t i = 0; i < iter; i++) {
 		switch (mlp) {
 		case 32:
 			next[31] = list[31][next[31]];
@@ -275,7 +275,7 @@ int main(int argc, char* argv[])
 	int opt, prio;
 	int i,j,k,l;
 
-	long repeat = DEFAULT_ITER;
+	int64_t repeat = DEFAULT_ITER;
 	int mlp = 1;
 	int use_hugepage = 0;
 	struct timespec start, end;
@@ -323,7 +323,7 @@ int main(int argc, char* argv[])
 			break;
 		case 'i': /* iterations */
 			repeat = strtol(optarg, NULL, 0);
-			fprintf(stderr, "repeat=%ld\n", repeat);
+			fprintf(stderr, "repeat=%lld\n", repeat);
 			break;
 		case 'l': /* MLP */
 			mlp = strtol(optarg, NULL, 0);
@@ -400,7 +400,7 @@ int main(int argc, char* argv[])
 	printf("Init took %.0f us\n", (double) get_elapsed(&start, &end)/1000);
 
 
-	long naccess;
+	int64_t naccess;
 	clock_gettime(CLOCK_REALTIME, &start);
 	/* actual access */
 	if (acc_type == READ)
@@ -414,7 +414,7 @@ int main(int argc, char* argv[])
 	double  avglat = (double)nsdiff/naccess;
 
 	printf("size: %d (%d KB)\n", g_mem_size, g_mem_size/1024);
-	printf("duration %.0f ns, #access %ld\n", (double)nsdiff, naccess);
+	printf("duration %.0f ns, #access %lld\n", (double)nsdiff, naccess);
 	printf("bandwidth %.2f MB/s\n", (double)64*1000*naccess/nsdiff);
 
 	return 0;
