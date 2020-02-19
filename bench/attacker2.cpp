@@ -547,9 +547,11 @@ int main(int argc, char* argv[])
 			memchunk[curr_idx] = next_idx;
 			// printf("%8d\n", myvector[i]);
 		}
+		
+		int init_idx = myvector[0] * CACHE_LINE_SIZE / 4;
 
 		list[l] = memchunk; // &memchunk[l * CACHE_LINE_SIZE/4];
-		next[l] = list[l][0];
+		next[l] = list[l][init_idx];
 		printf("list[%d]  0x%p\n", l, list[l]);
 
 		myvector.clear();
