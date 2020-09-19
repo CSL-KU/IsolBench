@@ -16,5 +16,7 @@ bandwidth-rt: bandwidth-rt.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@ -lpthread
 pagetype: pagetype.o
 
+install:
+	cp -v $(PGMS) /usr/local/bin
 clean:
 	rm *.o *~ $(PGMS)
