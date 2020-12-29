@@ -25,5 +25,7 @@ attacker: attacker.o attacker.s
 	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@ -lpthread
 pagetype: pagetype.o
 
+install:
+	cp -v $(PGMS) /usr/local/bin
 clean:
 	rm *.o *~ $(PGMS)
