@@ -415,6 +415,7 @@ int main(int argc, char* argv[])
 
 	printf("size: %d (%d KB)\n", g_mem_size, g_mem_size/1024);
 	printf("duration %.0f ns, #access %lld\n", (double)nsdiff, naccess);
+	printf("Avg. latency %.2f ns\n", avglat);
 	printf("bandwidth %.2f MB/s\n", (double)64*1000*naccess/nsdiff);
 
 	return 0;
