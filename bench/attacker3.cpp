@@ -49,7 +49,7 @@
 #endif
 #define DEFAULT_ITER 100
 
-#ifdef __LP64
+#ifdef __LP64__
 #define BITS_PER_LONG 64
 #else
 #define BITS_PER_LONG 32
@@ -69,8 +69,8 @@ static int g_mem_size = (DEFAULT_ALLOC_SIZE_KB*1024);
 static int* list[MAX_MLP];
 static int next[MAX_MLP];
 
-static unsigned long l2_bitmask   = 0x1f000; // 16 | 15,14,13,12 |  cortex-a15
-static unsigned long dram_bitmask = 0x1e000; // 16 | 15,14,13,-- |  cortex-a15
+// static unsigned long dram_bitmask = 0x1e000; // 16|15,14,13,--| : xu4 (cortex-a15)
+static unsigned long dram_bitmask = 0x7800;  // --,14,13,12|11  : pi4 (cortex-a72)
 
 /**************************************************************************
  * Public Function Prototypes
@@ -185,8 +185,8 @@ int paddr_to_color(unsigned long mask, unsigned long paddr)
 {
 	int color = 0;
 	int idx = 0;
-	int c;
-	for_each_set_bit(c, &mask, sizeof(unsigned long) * 8) {
+	unsigned long c = 0;
+	for_each_set_bit(c, &mask, BITS_PER_LONG) {
 		if ((paddr >> (c)) & 0x1)
 			color |= (1<<idx);
 		idx++;
@@ -386,14 +386,14 @@ long run_write(long iter, int mlp)
 
 int main(int argc, char* argv[])
 {
-	struct sched_param param;
+	// struct sched_param param;
         cpu_set_t cmask;
 	int num_processors;
 	int cpuid = 0;
 
 	int *memchunk = NULL;
 	int opt, prio;
-	int i,j,k,l;
+	int i,l;
 
 	long repeat = DEFAULT_ITER;
 	int mlp = 1;
@@ -403,11 +403,11 @@ int main(int argc, char* argv[])
 
 	std::srand (0);
 	std::vector<int> myvector;
-	
+
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt(argc, argv, "m:a:c:i:l:ht")) != -1) {
+	while ((opt = getopt(argc, argv, "m:a:c:b:i:l:ht")) != -1) {
 		switch (opt) {
 		case 'm': /* set memory size */
 			g_mem_size = 1024 * strtol(optarg, NULL, 0);
@@ -420,7 +420,9 @@ int main(int argc, char* argv[])
 			else
 				exit(1);
 			break;
-			
+		case 'b':
+			dram_bitmask = strtol(optarg, NULL, 0);
+			break;
 		case 'c': /* set CPU affinity */
 			cpuid = strtol(optarg, NULL, 0);
 			fprintf(stderr, "cpuid: %d\n", cpuid);
@@ -456,6 +458,14 @@ int main(int argc, char* argv[])
 
 	}
 
+	printf("sizeof(unsigned long): %d\n", (int)sizeof(unsigned long));
+	printf("BITS_PER_LONG: %d\n", BITS_PER_LONG);
+	unsigned long c;
+	printf("DRAM Bank bits: ");
+	for_each_set_bit(c, (&dram_bitmask), BITS_PER_LONG) {
+		printf("%d ", (int)c);
+	}
+	printf("\n");
 
 	srand(0);
 
@@ -493,11 +503,10 @@ int main(int argc, char* argv[])
 		for (int i=0; i<orig_ws; i++) {
 			ulong vaddr = (ulong)&memchunk[i*CACHE_LINE_SIZE/4];
 #if 0
-			printf("vaddr-paddr: %p-%p bank: %d l2: %d\n",
-			       (void *)vaddr, (void *)paddr,
-			       paddr_to_color(dram_bitmask, paddr),
-			       paddr_to_color(l2_bitmask, paddr));
-#endif			
+			printf("vaddr: %p color: %d\n",
+			       (void *)vaddr,
+			       paddr_to_color(dram_bitmask, vaddr));
+#endif
 			if (paddr_to_color(dram_bitmask, vaddr) == 0) // color 0 only
 				myvector.push_back(i);
 		}

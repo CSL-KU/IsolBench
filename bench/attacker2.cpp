@@ -49,7 +49,7 @@
 #endif
 #define DEFAULT_ITER 100
 
-#ifdef __LP64
+#ifdef __LP64__
 #define BITS_PER_LONG 64
 #else
 #define BITS_PER_LONG 32
