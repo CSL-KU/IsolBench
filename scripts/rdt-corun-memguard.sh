@@ -1,5 +1,5 @@
 victim=$1
-vacc=$2
+iter=$2
 corun=$3
 cacc=$4
 
@@ -23,11 +23,11 @@ for limit in "${limits[@]}"; do
 	echo "Co-runner B/W = $limit MB/s"
 	echo "==================================================="
 
-	perf stat -e LLC-load-misses,LLC-loads chrt -f 1 bandwidth -c 0 -i 100 -t 100 -m $victim -a $vacc 2> /dev/null | grep average | awk 'NF{ print $(NF-7) }'
+	perf stat -e LLC-load-misses,LLC-loads chrt -f 1 bandwidth -c 0 -i $iter -t 100 -m $victim 2> /dev/null | grep average | awk 'NF{ print $(NF-7) }'
 	for ((i=1; i<24; i+=1))
 	do
 		bandwidth -c $i -t 0 -a $cacc -m $corun &> /dev/null &
-		perf stat -e LLC-load-misses,LLC-loads chrt -f 1 bandwidth -c 0 -i 100 -t 100 -m $victim -a $vacc 2> /dev/null | grep average | awk 'NF{ print $(NF-7) }'
+		perf stat -e LLC-load-misses,LLC-loads chrt -f 1 bandwidth -c 0 -i $iter -t 100 -m $victim 2> /dev/null | grep average | awk 'NF{ print $(NF-7) }'
 	done
 	killall bandwidth
 done
