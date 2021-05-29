@@ -13,6 +13,8 @@ fi
 mlp=$1
 corun=$2
 
+echoerr() { echo "$@" 1>&2; }
+
 [ -z "$3" ] && st=0 || st=$3
 
 c_start=`expr $st + 1`
@@ -21,13 +23,14 @@ c_end=`expr $st + $corun`
 ALLOC_MODE="-t" # -t: huge tlbe, -x: /dev/mem"
 killall latency-mlp >& /dev/null
 
-for l in `seq 1 $mlp`; do 
+for l in `seq 1 $mlp`; do
     for c in `seq $c_start $c_end`; do
 	latency-mlp -c $c -l $l -i 20000 $ALLOC_MODE >& /dev/null &
     done
     sleep 0.5
-    latency-mlp -c $st -l $l -i 100 $ALLOC_MODE
+    latency-mlp -c $st -l $l -i 100 $ALLOC_MODE 2> /dev/null
     killall latency-mlp >& /dev/null
+    echoerr  $l `tail -n 1 /tmp/test.txt`
 done  > /tmp/test.txt
 BWS=`grep bandwidth /tmp/test.txt | awk '{ print $2 }'`
 
