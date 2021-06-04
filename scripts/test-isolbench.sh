@@ -15,7 +15,7 @@ test_latency_vs_bandwidth()
     endcpu=`expr $startcpu + 3`
     
     log_echo "latency($size_in_kb_subject) bandwidth_$acc_type ($size_in_kb_corun)"
-    
+    log_echo "avglat(ns)  L1_miss  LLC_miss   LLC_access  LLC_missrate"
     for cpu in `seq $startcpu $endcpu`; do
         if [ $cpu -ne $startcpu ]; then
             # launch a co-runner
@@ -27,10 +27,15 @@ test_latency_vs_bandwidth()
 
         # launch a subject
 	[ -d "$CG_PALLOC_DIR" ] && echo $$ > $CG_PALLOC_DIR/subject/tasks
-	latency -m $size_in_kb_subject -c $startcpu -i 10000 -r 1 2> /dev/null > tmpout.txt
+	perf stat -e cache-misses,L1-dcache-load-misses,LLC-load-misses,LLC-loads \
+	     latency -m $size_in_kb_subject -c $startcpu -i 10000 -r 1 2> tmperr.txt > tmpout.txt
 	    
         output=`grep average tmpout.txt | awk '{ print $2 }'`
-	log_echo $output
+	perf_L1_miss=`grep L1-dcache-load-misses tmperr.txt | awk '{ print $1 }'`
+	perf_LLC_miss=`grep LLC-load-misses tmperr.txt | awk '{ print $1 }'`
+	perf_LLC_access=`grep LLC-loads tmperr.txt | awk '{ print $1 }'`
+	perf_LLC_missrate=`grep LL-cache tmperr.txt | awk '{ print $4 }'`
+	log_echo $output $perf_L1_miss $perf_LLC_miss $perf_LLC_access $perf_LLC_missrate
     # cleanup >& /dev/null
     done	
     cleanup >& /dev/null
@@ -49,7 +54,7 @@ test_bandwidth_vs_bandwidth()
     endcpu=`expr $startcpu + 3`
 
     log_echo "bandwidth_read ($size_in_kb_subject) bandwidth_$acc_type ($size_in_kb_corun)"
-
+    log_echo "avglat(ns)  L1_miss  LLC_miss   LLC_access  LLC_missrate"
     for cpu in `seq $startcpu $endcpu`; do 
         if [ $cpu -ne $startcpu ]; then
             # launch a co-runner
@@ -61,9 +66,15 @@ test_bandwidth_vs_bandwidth()
 
         # launch a subject
 	[ -d "$CG_PALLOC_DIR" ] && echo $$ > $CG_PALLOC_DIR/subject/tasks
-        bandwidth -m $size_in_kb_subject -t 4 -c $startcpu -r 1 2> /dev/null > tmpout.txt
+	perf stat -e cache-misses,L1-dcache-load-misses,LLC-load-misses,LLC-loads \
+             bandwidth -m $size_in_kb_subject -t 4 -c $startcpu -r 1 2> tmperr.txt > tmpout.txt
         output=`grep average tmpout.txt | awk '{ print $10 }'`
-	log_echo $output
+	perf_L1_miss=`grep L1-dcache-load-misses tmperr.txt | awk '{ print $1 }'`
+	perf_LLC_miss=`grep LLC-load-misses tmperr.txt | awk '{ print $1 }'`
+	perf_LLC_access=`grep LLC-loads tmperr.txt | awk '{ print $1 }'`
+	perf_LLC_missrate=`grep LL-cache tmperr.txt | awk '{ print $4 }'`
+	log_echo $output $perf_L1_miss $perf_LLC_miss $perf_LLC_access $perf_LLC_missrate
+	
     done	
     cleanup >& /dev/null
 }
@@ -123,6 +134,10 @@ elif grep "Ryzen 3 2200G" /proc/cpuinfo; then
     # ryzen apu
     llc_ws=1024
     dram_ws=16384
+elif grep "i7-1185GRE" /proc/cpuinfo; then
+    # tigerlake
+    llc_ws=2560
+    dram_ws=24576
 else
     error "CPU specific 'llc_ws' and 'dram_ws' variables are not set"
 fi
@@ -133,6 +148,8 @@ outputfile=log.txt
 startcpu=$1
 [ -z "$startcpu" ] && startcpu=0
 
+test_latency_vs_bandwidth $llc_ws "read" $startcpu
+test_latency_vs_bandwidth $llc_ws "write" $startcpu
 test_latency_vs_bandwidth $dram_ws "read" $startcpu
 test_bandwidth_vs_bandwidth $dram_ws "read" $startcpu
 test_bandwidth_vs_bandwidth $llc_ws "read" $startcpu
