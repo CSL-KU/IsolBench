@@ -266,14 +266,14 @@ int64_t run(int64_t iter, int mlp)
 
 int main(int argc, char* argv[])
 {
-	struct sched_param param;
+	// struct sched_param param;
         cpu_set_t cmask;
 	int num_processors;
 	int cpuid = 0;
 
 	int *memchunk = NULL;
 	int opt, prio;
-	int i,j,k,l;
+	int i,l;
 
 	int64_t repeat = DEFAULT_ITER;
 	int mlp = 1;
@@ -287,7 +287,7 @@ int main(int argc, char* argv[])
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt(argc, argv, "m:a:c:i:l:ht")) != -1) {
+	while ((opt = getopt(argc, argv, "m:a:c:i:l:hx")) != -1) {
 		switch (opt) {
 		case 'm': /* set memory size */
 			g_mem_size = 1024 * strtol(optarg, NULL, 0);
@@ -323,13 +323,13 @@ int main(int argc, char* argv[])
 			break;
 		case 'i': /* iterations */
 			repeat = strtol(optarg, NULL, 0);
-			fprintf(stderr, "repeat=%lld\n", repeat);
+			fprintf(stderr, "repeat=%ld\n", (unsigned long)repeat);
 			break;
 		case 'l': /* MLP */
 			mlp = strtol(optarg, NULL, 0);
 			fprintf(stderr, "MLP=%d\n", mlp);
 			break;
-                case 't':
+                case 'x':
 			use_hugepage = (use_hugepage) ? 0: 1;
 			break;
 		}
@@ -414,7 +414,7 @@ int main(int argc, char* argv[])
 	double  avglat = (double)nsdiff/naccess;
 
 	printf("size: %d (%d KB)\n", g_mem_size, g_mem_size/1024);
-	printf("duration %.0f ns, #access %lld\n", (double)nsdiff, naccess);
+	printf("duration %.0f ns, #access %ld\n", (double)nsdiff, (unsigned long)naccess);
 	printf("Avg. latency %.2f ns\n", avglat);
 	printf("bandwidth %.2f MB/s\n", (double)64*1000*naccess/nsdiff);
 
