@@ -1,6 +1,6 @@
 CC=gcc
 CXX=g++
-PGMS=latency latency-mlp bandwidth pagetype bandwidth-rt attacker attacker2 attacker3 attacker4
+PGMS=latency latency-mlp bandwidth pagetype bandwidth-rt attacker attacker2 attacker3 attacker4 slice-att
 
 CFLAGS=-O2 -Wall -g
 CXXFLAGS=$(CFLAGS)
@@ -16,6 +16,9 @@ attacker2: attacker2.o
 attacker3: attacker3.o
 	$(CXX) $(CFLAGS) $(LDFLAGS) $< -o $@
 attacker4: attacker4.o
+	$(CXX) $(CFLAGS) $(LDFLAGS) $< -o $@
+
+slice-att: slice-att.o
 	$(CXX) $(CFLAGS) $(LDFLAGS) $< -o $@
 
 bandwidth: bandwidth.o
