@@ -529,8 +529,8 @@ int main(int argc, char* argv[])
 
 		// set some values:
 		for (int i=0; i<orig_ws; i++) {
-			ulong paddr = (ulong)&memchunk[i*CACHE_LINE_SIZE/4];
-			ulong vaddr = getPhysicalAddr(paddr);
+			ulong vaddr = (ulong)&memchunk[i*CACHE_LINE_SIZE/4];
+			//ulong vaddr = getPhysicalAddr(paddr);
 #if 0
 			printf("vaddr: %p color: %d\n",
 			       (void *)vaddr,
@@ -538,10 +538,10 @@ int main(int argc, char* argv[])
 #endif
 			int slice_bit0 = ( ((vaddr >> 6) & 0x1) ^ ((vaddr >> 10) & 0x1) ^ ((vaddr >> 12) & 0x1) ^ ((vaddr >> 14) & 0x1) ^ ((vaddr >> 16) & 0x1) ^ ((vaddr >> 18) & 0x1) ^ 
 					   ((vaddr >> 20) & 0x1) ^ ((vaddr >> 22) & 0x1) ^ ((vaddr >> 24) & 0x1) ^ ((vaddr >> 25) & 0x1) ^ ((vaddr >> 26) & 0x1) ^ ((vaddr >> 27) & 0x1) ^ 
-					   ((vaddr >> 28) & 0x1) ^ ((vaddr >> 30) & 0x1) ^ ((vaddr >> 32) & 0x1) ^ ((vaddr >> 33) & 0x1) ^ ((vaddr >> 17) & 0x1) );
+					   ((vaddr >> 28) & 0x1) ^ ((vaddr >> 30) & 0x1) ^ ((vaddr >> 32) & 0x1) ^ ((vaddr >> 33) & 0x1) ^ ((vaddr >> 17) & 0x1) ^ ((vaddr >> 35) & 0x1) ^ ((vaddr >> 36) & 0x1) );
 			int slice_bit1 = ( ((vaddr >> 7) & 0x1) ^ ((vaddr >> 11) & 0x1) ^ ((vaddr >> 13) & 0x1) ^ ((vaddr >> 15) & 0x1) ^ ((vaddr >> 17) & 0x1) ^ ((vaddr >> 19) & 0x1) ^ 
 					   ((vaddr >> 20) & 0x1) ^ ((vaddr >> 21) & 0x1) ^ ((vaddr >> 22) & 0x1) ^ ((vaddr >> 23) & 0x1) ^ ((vaddr >> 24) & 0x1) ^ ((vaddr >> 26) & 0x1) ^ 
-					   ((vaddr >> 28) & 0x1) ^ ((vaddr >> 29) & 0x1) ^ ((vaddr >> 31) & 0x1) ^ ((vaddr >> 33) & 0x1) ^ ((vaddr >> 34) & 0x1) );
+					   ((vaddr >> 28) & 0x1) ^ ((vaddr >> 29) & 0x1) ^ ((vaddr >> 31) & 0x1) ^ ((vaddr >> 33) & 0x1) ^ ((vaddr >> 34) & 0x1) ^ ((vaddr >> 35) & 0x1) );
 			if (slice_bit0 == 0 && slice_bit1 == 0)
 		        //if (paddr_to_color(dram_bitmask, vaddr) == 0) // color 0 only
 				myvector.push_back(i);
