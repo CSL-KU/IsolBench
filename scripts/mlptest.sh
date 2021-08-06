@@ -18,7 +18,7 @@ corun=$2
 c_start=`expr $st + 1`
 c_end=`expr $st + $corun`
 
-ALLOC_MODE="-t" # -t: huge tlbe, -x: /dev/mem"
+ALLOC_MODE="-x" # -x: huge tlb
 killall latency-mlp >& /dev/null
 
 for l in `seq 1 $mlp`; do 

@@ -78,6 +78,8 @@ int period = 0; /* in ms */
 int verbose = 0;
 int cpuid = 0;
 int thread_local = 0;
+int use_hugepage = 0;
+
 
 volatile uint64_t g_nread = 0;	           /* number of bytes read */
 volatile unsigned int g_start;		   /* starting time */
@@ -181,6 +183,30 @@ void wait_period (struct periodic_info *info)
         info->wakeups_missed += timer_getoverrun (info->timer_id);
 }
 
+void *my_alloc(int size)
+{
+	void *ptr;
+	if (use_hugepage) {
+		ptr = mmap(0, 
+			   size,
+			   PROT_READ | PROT_WRITE, 
+			   MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 
+			   -1, 0);
+		if (ptr == MAP_FAILED) {
+			perror("alloc failed");
+			exit(1);
+		}
+	} else {
+		ptr = malloc(size);
+		if (ptr == NULL) {
+			perror("alloc failed");
+			exit(1);
+		}
+		printf("Using malloc(), not very accurate\n");
+	}
+	return ptr;
+}
+
 void worker(void *param)
 {
 	int64_t sum = 0;
@@ -189,17 +215,20 @@ void worker(void *param)
 	
 	struct periodic_info *info = (struct periodic_info *)param;
 
+	int id = __atomic_fetch_add(&g_njoin, 1, __ATOMIC_SEQ_CST);
+	printf("id%d started\n", id);
+	
 	/*
 	 * allocate contiguous region of memory 
 	 */
-	if (thread_local) {
-		l_mem_ptr = malloc(g_mem_size);
+	if (thread_local && id > 0) {
+		printf("id%d local allocation\n", id);
+		l_mem_ptr = (char *)my_alloc(g_mem_size);
 		memset(l_mem_ptr, 1, g_mem_size);
 	} else {
 		l_mem_ptr = g_mem_ptr;
 	}
 
-	__atomic_fetch_add(&g_njoin, 1, __ATOMIC_SEQ_CST);
 	while (g_njoin < g_nthreads); // busy wait until all join
 
 	/*
@@ -252,6 +281,7 @@ void usage(int argc, char *argv[])
 	printf("-l: job period (in ms)\n");
 	printf("-v: debug level (in ms)\n");
 	printf("-o: per-thread allocation\n");
+	printf("-x: hugepage allocation\n");	
 	printf("-h: help\n");
 	printf("\nExamples: \n$ bandwidth-rt -m 8192 -c 2 -a read -i 10 -j 100 -l 10 -c 2\n  <- 8MB read*10 iterations per job, for 100 jobs with 10ms period, on CPU 2\n");
 	exit(1);
@@ -272,13 +302,14 @@ int main(int argc, char *argv[])
 	struct periodic_info info[32];
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
-	
+        
 	static struct option long_options[] = {
 		{"threads", required_argument, 0,  'n' },		
 		{"period",  required_argument, 0,  'l' },
 		{"jobs",    required_argument, 0,  'j' },
 		{"verbose", required_argument, 0,  'v' },
 		{"local",   no_argument,       0,  'o' },
+		{"hugepage", no_argument,      0,  'x' },
 		{0,         0,                 0,  0 }
 	};
 	int option_index = 0;
@@ -288,7 +319,7 @@ int main(int argc, char *argv[])
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt_long(argc, argv, "m:n:a:t:c:r:p:i:j:l:hv:o",
+	while ((opt = getopt_long(argc, argv, "m:n:a:t:c:r:p:i:j:l:xhv:o",
 				  long_options, &option_index)) != -1) {
 		switch (opt) {
 		case 'm': /* set memory size */
@@ -348,6 +379,9 @@ int main(int argc, char *argv[])
 		case 'v':
 			verbose = strtol(optarg, NULL, 0);
 			break;
+                case 'x':
+			use_hugepage = 1;
+			break;
 		case 'o':
 			thread_local = 1;
 			break;
@@ -357,7 +391,7 @@ int main(int argc, char *argv[])
 	/*
 	 * allocate contiguous region of memory 
 	 */
-	g_mem_ptr = malloc(g_mem_size);
+	g_mem_ptr = (char *)my_alloc(g_mem_size);
 	memset(g_mem_ptr, 1, g_mem_size);
 
 	/* print experiment info before starting */

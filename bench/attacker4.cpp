@@ -413,7 +413,7 @@ int main(int argc, char* argv[])
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt(argc, argv, "m:a:c:d:e:b:i:l:ht")) != -1) {
+	while ((opt = getopt(argc, argv, "m:a:c:d:e:b:i:l:hx")) != -1) {
 		switch (opt) {
 		case 'm': /* set memory size */
 			g_mem_size = 1024 * strtol(optarg, NULL, 0);
@@ -463,7 +463,7 @@ int main(int argc, char* argv[])
 			mlp = strtol(optarg, NULL, 0);
 			fprintf(stderr, "MLP=%d\n", mlp);
 			break;
-                case 't':
+                case 'x':
 			use_hugepage = (use_hugepage) ? 0: 1;
 			break;
 		}
