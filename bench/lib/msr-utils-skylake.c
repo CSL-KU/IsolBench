@@ -273,7 +273,7 @@ void uncore_init() {
 int find_CHA_CBO() {
 
 	int i;
-	unsigned long long* CHA_CBO_value = calloc(NUMBER_SLICES, sizeof(unsigned long long));
+	unsigned long long* CHA_CBO_value = (unsigned long long *)calloc(NUMBER_SLICES, sizeof(unsigned long long));
 
 	/* Read CHA/CBo counter's value */
 	for(i=0; i<NUMBER_SLICES; i++){
