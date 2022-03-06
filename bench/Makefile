@@ -25,7 +25,7 @@ ocl_simple_add: ocl_simple_add.o
 slice-att: slice-att.o
 	$(CXX) $(CFLAGS) $(LDFLAGS) $< -o $@
 attacker4-coffeelake: attacker4-coffeelake.o
-	$(CXX) $(CFLAGS) $(LDFLAGS) $< -o $@
+	$(CXX) $(CFLAGS) $(LDFLAGS) $(OCLLIB) $< -o $@
 
 bandwidth: bandwidth.o
 bandwidth-rt: bandwidth-rt.o
