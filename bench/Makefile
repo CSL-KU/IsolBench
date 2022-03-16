@@ -23,7 +23,7 @@ slice-att: slice-att.o
 
 bandwidth: bandwidth.o
 bandwidth-rt: bandwidth-rt.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@ -lpthread
+	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@ -lpthread -latomic
 attacker.s: attacker.c
 	$(CC) $(CFLAGS) -S -c $(LDFLAGS) $< -o $@ 
 attacker: attacker.o attacker.s
