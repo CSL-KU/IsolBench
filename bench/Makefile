@@ -1,6 +1,6 @@
 CC=gcc
 CXX=g++
-PGMS=latency latency-mlp bandwidth pagetype bandwidth-rt attacker attacker2 attacker3 attacker4 slice-att gpuwrite attacker4-coffeelake ocl_simple_add
+PGMS=latency latency-mlp bandwidth pagetype bandwidth-rt attacker attacker2 attacker3 attacker4 slice-att attacker4-coffeelake ocl_simple_add
 
 CFLAGS=-O2 -Wall -g
 CXXFLAGS=$(CFLAGS)
@@ -18,8 +18,6 @@ attacker3: attacker3.o
 	$(CXX) $(CFLAGS) $(LDFLAGS) $< -o $@
 attacker4: attacker4.o
 	$(CXX) $(CFLAGS) $(LDFLAGS) $< -o $@
-gpuwrite: gpuwrite.o
-	$(CXX) $(CFLAGS) $(LDFLAGS) $(OCLLIB) $< -o $@
 ocl_simple_add: ocl_simple_add.o
 	$(CXX) $(CFLAGS) $(LDFLAGS) $(OCLLIB) $< -o $@
 slice-att: slice-att.o
