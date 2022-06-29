@@ -29,7 +29,7 @@ attacker4-coffeelake: attacker4-coffeelake.o
 
 bandwidth: bandwidth.o
 bandwidth-rt: bandwidth-rt.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@ -lpthread
+	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@ -lpthread -latomic
 attacker.s: attacker.c
 	$(CC) $(CFLAGS) -S -c $(LDFLAGS) $< -o $@ 
 attacker: attacker.o attacker.s
