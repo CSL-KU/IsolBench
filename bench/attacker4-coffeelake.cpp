@@ -41,7 +41,8 @@
 #include <sys/resource.h>
 #include <assert.h>
 
-#include "cl2.hpp"
+// #include "cl2.hpp"
+#include <CL/cl.h>
 
 /**************************************************************************
  * Public Definitions
@@ -278,7 +279,7 @@ int main(int argc, char* argv[])
 	printf(" %d.%d Software version: %s\n", 1, 2, value);
 	free(value);
 
-	// print c version supported by compiler for device
+ 	// print c version supported by compiler for device
 	clGetDeviceInfo(device_id, CL_DEVICE_OPENCL_C_VERSION, 0, NULL, &valueSize);
 	value = (char*) malloc(valueSize);
 	clGetDeviceInfo(device_id, CL_DEVICE_OPENCL_C_VERSION, valueSize, value, NULL);
@@ -407,8 +408,8 @@ int main(int argc, char* argv[])
 	cl_kernel kernel = clCreateKernel(program, "gpuwrite", &ret);
 	clSetKernelArgSVMPointer(kernel, 0, memchunk);
 	clSetKernelArgSVMPointer(kernel, 1, next);
-	int iter = repeat * list_len; 
-	clSetKernelArg(kernel, 2, sizeof(int), &iter);
+	long iter = repeat * list_len; 
+	clSetKernelArg(kernel, 2, sizeof(long), &iter);
 	
 	size_t global_item_size = mlp;
 	size_t local_item_size = list_len;
@@ -417,12 +418,12 @@ int main(int argc, char* argv[])
 	clock_gettime(CLOCK_REALTIME, &start);
 	
 	clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, &global_item_size, NULL, 0, NULL,NULL);
-	printf("before flush\n");
+	fprintf(stderr, "before flush\n");
 	ret = clFlush(command_queue);
-	printf("before finish\n");
+	fprintf(stderr, "before finish\n");
 	ret = clFinish(command_queue);
 	clock_gettime(CLOCK_REALTIME, &end);
-	printf("gpu kernel finishes\n");
+	fprintf(stderr, "gpu kernel finishes\n");
 	
 
 	ret = clReleaseKernel(kernel);
@@ -439,7 +440,8 @@ int main(int argc, char* argv[])
 	printf("ws size: %d (%d KB)\n", total_ws, total_ws / 1024);
 	printf("list_len: %d (%d KB)\n", list_len, list_len * CACHE_LINE_SIZE / 1024);
 	printf("mlp: %d\n", mlp);
-	printf("duration %.0f ns, #access %ld\n", (double)nsdiff, naccess);
+	printf("duration %.0f ns (%.2f sec), #access %ld\n",
+	       (double)nsdiff, (double)nsdiff/1000000000, naccess);
 	printf("Avg. latency %.2f ns\n", avglat);	
 	printf("bandwidth %.2f MB/s\n", (double)64*1000*naccess/nsdiff);
 	
