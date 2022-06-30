@@ -41,8 +41,7 @@
 #include <sys/resource.h>
 #include <assert.h>
 
-// #include "cl2.hpp"
-#include <CL/cl.h>
+#include "cl2.hpp"
 
 /**************************************************************************
  * Public Definitions
@@ -418,12 +417,12 @@ int main(int argc, char* argv[])
 	clock_gettime(CLOCK_REALTIME, &start);
 	
 	clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, &global_item_size, NULL, 0, NULL,NULL);
-	fprintf(stderr, "before flush\n");
+	printf("before flush\n");
 	ret = clFlush(command_queue);
-	fprintf(stderr, "before finish\n");
+	printf("before finish\n");
 	ret = clFinish(command_queue);
 	clock_gettime(CLOCK_REALTIME, &end);
-	fprintf(stderr, "gpu kernel finishes\n");
+	printf("gpu kernel finishes\n");
 	
 
 	ret = clReleaseKernel(kernel);
