@@ -20,7 +20,7 @@ log_echo()
 
 cleanup()
 {
-    killall latency latency-mlp bandwidth
+    killall latency latency-mlp bandwidth bandwidth-rt
     kill_spec >& /dev/null
     sleep 1
 }
