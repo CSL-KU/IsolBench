@@ -79,7 +79,7 @@ int verbose = 0;
 int cpuid = 0;
 int thread_local = 0;
 int use_hugepage = 0;
-
+int stride = CACHE_LINE_SIZE;
 
 volatile uint64_t g_nread = 0;	           /* number of bytes read */
 volatile unsigned int g_start;		   /* starting time */
@@ -112,7 +112,7 @@ int64_t bench_read(char *mem_ptr)
 {
 	int i;	
 	int64_t sum = 0;
-	for ( i = 0; i < g_mem_size; i+=(CACHE_LINE_SIZE) ) {
+	for ( i = 0; i < g_mem_size; i+=stride ) {
 		sum += mem_ptr[i];
 	}
 	// g_nread += g_mem_size;	
@@ -123,7 +123,7 @@ int64_t bench_read(char *mem_ptr)
 int bench_write(char *mem_ptr)
 {
 	register int i;
-	for ( i = 0; i < g_mem_size; i+=(CACHE_LINE_SIZE) ) {
+	for ( i = 0; i < g_mem_size; i+=stride ) {
 		mem_ptr[i] = 0xff;
 	}
 	// g_nread += g_mem_size;	
@@ -302,12 +302,13 @@ int main(int argc, char *argv[])
 	struct periodic_info info[32];
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
-        
+
 	static struct option long_options[] = {
 		{"threads", required_argument, 0,  'n' },		
 		{"period",  required_argument, 0,  'l' },
 		{"jobs",    required_argument, 0,  'j' },
 		{"verbose", required_argument, 0,  'v' },
+		{"stride",  required_argument, 0,  's' },
 		{"local",   no_argument,       0,  'o' },
 		{"hugepage", no_argument,      0,  'x' },
 		{0,         0,                 0,  0 }
@@ -319,7 +320,7 @@ int main(int argc, char *argv[])
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt_long(argc, argv, "m:n:a:t:c:r:p:i:j:l:xhv:o",
+	while ((opt = getopt_long(argc, argv, "m:n:a:t:c:r:p:i:j:l:xhv:os:",
 				  long_options, &option_index)) != -1) {
 		switch (opt) {
 		case 'm': /* set memory size */
@@ -379,6 +380,9 @@ int main(int argc, char *argv[])
 		case 'v':
 			verbose = strtol(optarg, NULL, 0);
 			break;
+		case 's':
+			stride = strtol(optarg, NULL, 0);
+			break;
                 case 'x':
 			use_hugepage = 1;
 			break;
@@ -395,7 +399,7 @@ int main(int argc, char *argv[])
 	memset(g_mem_ptr, 1, g_mem_size);
 
 	/* print experiment info before starting */
-	printf("mem=%d KB (%s), type=%s, nthreads=%d cpuid=%d, iterations=%d, jobs=%d, period=%d\n",
+	printf("mem=%d KB (%s), type=%s, nthreads=%d cpuid=%d, iterations=%d, jobs=%d, period=%d, stride=%d\n",
 	       g_mem_size/1024,
 	       (thread_local)? "private":"shared",
 	       ((acc_type==READ) ?"read": "write"),
@@ -403,7 +407,8 @@ int main(int argc, char *argv[])
 	       cpuid,
 	       iterations,
                jobs,
-	       period);
+	       period,
+	       stride);
 	printf("stop at %d\n", finish);
 
 	/* set signals to terminate once time has been reached */
