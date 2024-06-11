@@ -288,13 +288,24 @@ static unsigned long pagemap_pfn(uint64_t val)
 	return pfn;
 }
 
+int calculate_page_shift(int page_size) {
+	int shift = 0;
+
+	while ( page_size > 1 ) {
+		page_size >>= 1;
+		shift++;
+	}
+
+	return shift;
+}
+
 #ifdef __LP64
 #define BITS_PER_LONG 64
 #else
 #define BITS_PER_LONG 32
 #endif
 #define BITOP_WORD(nr)		((nr) / BITS_PER_LONG)
-#define PAGE_SHIFT 12
+#define PAGE_SHIFT (calculate_page_shift(sysconf(_SC_PAGESIZE)))
 
 static unsigned long palloc_bitmask = 0xc000;
 
