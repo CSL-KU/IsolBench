@@ -32,8 +32,8 @@ for l in `seq 1 $mlp`; do
     killall latency-mlp >& /dev/null
 
     if grep -qi "alloc failed" /tmp/err.txt; then
-        echo "Error: Failed to allocate memory for mlp $l, please allocate more hugepages." > /dev/tty
-        echo "Hint: Check /proc/meminfo and init-hugetlbfs.sh" > /dev/tty
+        echo "Error: Failed to allocate memory for mlp $l, please allocate more hugepages." >&2
+        echo "Hint: Check /proc/meminfo and init-hugetlbfs.sh" >&2
         exit 1
     fi
     echoerr  $l `tail -n 1 /tmp/test.txt`
