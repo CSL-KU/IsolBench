@@ -25,11 +25,17 @@ killall latency-mlp >& /dev/null
 
 for l in `seq 1 $mlp`; do
     for c in `seq $c_start $c_end`; do
-	latency-mlp -c $c -l $l -i 20000 $ALLOC_MODE >& /dev/null &
+	    latency-mlp -c $c -l $l -i 20000 $ALLOC_MODE >& /dev/null &
     done
     sleep 0.5
-    latency-mlp -c $st -l $l -i 100 $ALLOC_MODE 2> /dev/null
+    latency-mlp -c $st -l $l -i 100 $ALLOC_MODE 2> /tmp/err.txt
     killall latency-mlp >& /dev/null
+
+    if grep -qi "alloc failed" /tmp/err.txt; then
+        echo "Error: Failed to allocate memory for mlp $l, please allocate more hugepages." > /dev/tty
+        echo "Hint: Check /proc/meminfo and init-hugetlbfs.sh" > /dev/tty
+        exit 1
+    fi
     echoerr  $l `tail -n 1 /tmp/test.txt`
 done  > /tmp/test.txt
 BWS=`grep bandwidth /tmp/test.txt | awk '{ print $2 }'`
