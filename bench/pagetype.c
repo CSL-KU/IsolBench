@@ -74,7 +74,13 @@
 #define KPF_UNEVICTABLE		18
 #define KPF_HWPOISON		19
 #define KPF_NOPAGE		20
+
 #define KPF_KSM			21
+#define KPF_THP			22
+#define KPF_OFFLINE		23
+#define KPF_ZERO_PAGE		24
+#define KPF_IDLE		25
+#define KPF_PGTABLE		26
 
 /* [32-] kernel hacking assistances */
 #define KPF_RESERVED		32
@@ -124,6 +130,11 @@ static char *page_flag_names[] = {
 	[KPF_HWPOISON]		= "X:hwpoison",
 	[KPF_NOPAGE]		= "n:nopage",
 	[KPF_KSM]		= "x:ksm",
+	[KPF_THP]		= "t:thp",
+	[KPF_OFFLINE]		= "o:offline",
+	[KPF_ZERO_PAGE]		= "z:zero_page",
+	[KPF_IDLE]		= "i:idle",
+	[KPF_PGTABLE]		= "p:pgtable",
 
 	[KPF_RESERVED]		= "r:reserved",
 	[KPF_MLOCKED]		= "m:mlocked",
@@ -441,7 +452,7 @@ static char *page_flag_name(uint64_t flags)
 		present = (flags >> i) & 1;
 		if (!page_flag_names[i]) {
 			if (present)
-				fatal("unkown flag bit %d\n", i);
+				fatal("unknown flag bit %d\n", i);
 			continue;
 		}
 		buf[j++] = present ? page_flag_names[i][0] : '_';
