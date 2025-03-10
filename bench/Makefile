@@ -1,6 +1,6 @@
 CC=gcc
 CXX=g++
-PGMS=latency latency-mlp bandwidth pagetype bandwidth-rt
+PGMS=latency latency-mlp bandwidth pagetype bandwidth-rt cpuhog
 
 CFLAGS=-O2 -Wall -g
 CXXFLAGS=$(CFLAGS)
