@@ -109,6 +109,9 @@ void usage(int argc, char *argv[])
 	printf("-a: access type - read, write. default=read\n");
 	printf("-n: addressing pattern - Seq, Row, Bank. default=Seq\n");
 	printf("-t: time to run in sec. 0 means indefinite. default=5. \n");
+	printf("-x: use hugepage. default=0\n");
+	printf("-r: set real-time priority. default=0\n");
+	printf("     1(low)- 99(high) for SCHED_FIFO\n");
 	printf("-c: CPU to run.\n");
 	printf("-i: iterations. 0 means intefinite. default=0\n");
 	printf("-p: priority\n");
@@ -153,7 +156,7 @@ int main(int argc, char *argv[])
 		case 't': /* set time in secs to run */
 			finish = strtol(optarg, NULL, 0);
 			break;
-                case 'x':
+        case 'x':
 			use_hugepage = (use_hugepage) ? 0: 1;
 			break;
 		case 'c': /* set CPU affinity */
@@ -166,7 +169,6 @@ int main(int argc, char *argv[])
 			else
 				fprintf(stderr, "assigned to cpu %d\n", cpuid);
 			break;
-
 		case 'r':
 			prio = strtol(optarg, NULL, 0);
 			param.sched_priority = prio; /* 1(low)- 99(high) for SCHED_FIFO or SCHED_RR
