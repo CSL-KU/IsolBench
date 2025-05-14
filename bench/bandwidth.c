@@ -129,6 +129,7 @@ int main(int argc, char *argv[])
 	int opt;
 	cpu_set_t cmask;
 	int iterations = 0;
+	int use_hugepage = 0;
 	int i;
 	struct sched_param param;
 
@@ -152,7 +153,9 @@ int main(int argc, char *argv[])
 		case 't': /* set time in secs to run */
 			finish = strtol(optarg, NULL, 0);
 			break;
-			
+                case 'x':
+			use_hugepage = (use_hugepage) ? 0: 1;
+			break;
 		case 'c': /* set CPU affinity */
 			cpuid = strtol(optarg, NULL, 0);
 			num_processors = sysconf(_SC_NPROCESSORS_CONF);
@@ -191,7 +194,24 @@ int main(int argc, char *argv[])
 	/*
 	 * allocate contiguous region of memory 
 	 */ 
-	g_mem_ptr = (int *)malloc(g_mem_size);
+	if (use_hugepage) {
+		g_mem_ptr = (int *)mmap(0,
+				       g_mem_size,
+				       PROT_READ | PROT_WRITE,
+				       MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
+				       -1, 0);
+		if ((void *)g_mem_ptr == MAP_FAILED) {
+			perror("alloc failed");
+			exit(1);
+		}
+	} else {
+		g_mem_ptr = (int *)malloc(g_mem_size);
+		if (g_mem_ptr == NULL) {
+			perror("alloc failed");
+			exit(1);
+		}
+		printf("Using malloc(), not very accurate\n");
+	}
 
 	memset((char *)g_mem_ptr, 1, g_mem_size);
 
