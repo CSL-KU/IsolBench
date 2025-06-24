@@ -156,7 +156,7 @@ int main(int argc, char *argv[])
 		case 't': /* set time in secs to run */
 			finish = strtol(optarg, NULL, 0);
 			break;
-        case 'x':
+		case 'x':
 			use_hugepage = (use_hugepage) ? 0: 1;
 			break;
 		case 'c': /* set CPU affinity */
