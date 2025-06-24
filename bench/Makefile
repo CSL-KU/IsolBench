@@ -2,7 +2,7 @@ CC=gcc
 CXX=g++
 PGMS=latency latency-mlp bandwidth pagetype bandwidth-rt cpuhog
 
-CFLAGS=-O2 -Wall -g
+CFLAGS=-O3 -Wall -march=native
 CXXFLAGS=$(CFLAGS)
 LDFLAGS=-Wl,--no-as-needed -lrt
 
