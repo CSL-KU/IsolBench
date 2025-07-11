@@ -16,7 +16,7 @@
  * Included Files
  **************************************************************************/
 #include <iostream>     // std::cout
-#include <algorithm>    // std::random_shuffle
+#include <algorithm>    // std::shuffle
 #include <vector>       // std::vector
 #include <ctime>        // std::time
 #include <cstdlib>      // std::rand, std::srand
@@ -36,6 +36,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <assert.h>
+#include <random>
 
 /**************************************************************************
  * Public Definitions
@@ -373,7 +374,7 @@ int main(int argc, char* argv[])
 		memset(memchunk, 0, g_mem_size);
 
 		// using built-in random generator:
-		std::random_shuffle ( myvector.begin(), myvector.end() );
+		std::shuffle(myvector.begin(), myvector.end(), std::default_random_engine(0));
 
 		for (i = 0; i < ws; i++) {
 			int curr_idx = myvector[i] * CACHE_LINE_SIZE / 4;
