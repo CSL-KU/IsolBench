@@ -1,22 +1,17 @@
-CC=gcc
-CXX=g++
-PGMS=latency latency-mlp bandwidth bandwidth-rt pll pagetype cpuhog 
+CC = gcc
+CXX = g++
+CFLAGS = -O3 -Wall -march=native -g
+CXXFLAGS = $(CFLAGS)
 
-CFLAGS=-O3 -Wall -march=native -g
-CXXFLAGS=$(CFLAGS)
-LDFLAGS=-lrt -lpthread
+PGMS = latency latency-mlp bandwidth bandwidth-rt pll pagetype cpuhog
 
 all: $(PGMS)
 
-# latency: latency.o
-# latency-mlp: latency-mlp.o
-# 	$(CXX) $(CFLAGS) $(LDFLAGS) $< -o $@
-# bandwidth: bandwidth.o
-# bandwidth-rt: bandwidth-rt.o
-# 	$(CC) $(CFLAGS) $(LDFLAGS) $< -o $@ -lpthread
-# pagetype: pagetype.o
+bandwidth-rt: bandwidth-rt.o
+	$(CC) $(CFLAGS) $< -o $@ -lrt -lpthread
 
 install:
 	cp -v $(PGMS) /usr/local/bin
+
 clean:
-	rm *.o *~ $(PGMS)
+	rm -f *.o *~ $(PGMS)
