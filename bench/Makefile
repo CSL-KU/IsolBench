@@ -4,7 +4,7 @@ PGMS=latency latency-mlp bandwidth bandwidth-rt pll pagetype cpuhog
 
 CFLAGS=-O3 -Wall -march=native -g
 CXXFLAGS=$(CFLAGS)
-LDFLAGS=-Wl,--no-as-needed -lrt
+LDFLAGS=-lrt -lpthread
 
 all: $(PGMS)
 
