@@ -16,7 +16,7 @@
  * Included Files
  **************************************************************************/
 #include <iostream>     // std::cout
-#include <algorithm>    // std::random_shuffle
+#include <algorithm>    // std::shuffle
 #include <vector>       // std::vector
 #include <ctime>        // std::time
 #include <cstdlib>      // std::rand, std::srand
@@ -36,6 +36,7 @@
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <assert.h>
+#include <random>
 
 /**************************************************************************
  * Public Definitions
@@ -449,7 +450,7 @@ int main(int argc, char* argv[])
 	}
 
 	// using built-in random generator:
-	std::random_shuffle (myvector.begin(), myvector.end() );
+	std::shuffle(myvector.begin(), myvector.end(), std::default_random_engine(0));
 
 	// update the workingset size
 	ws = myvector.size() / mlp * mlp; 
