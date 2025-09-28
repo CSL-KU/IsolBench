@@ -82,6 +82,10 @@ static int g_pagemap_fd = -1;
 // static unsigned long bank_bitmask = 0x1e000; // 16|15,14,13,--| : xu4 (cortex-a15)
 static unsigned long bank_bitmask = 0x7800;  // --,14,13,12|11  : pi4 (cortex-a72)
 
+// Bank bit mapping from file
+static std::vector<std::vector<int>> g_bank_functions;
+static char* g_map_file = nullptr;
+
 /**************************************************************************
  * Public Function Prototypes
  **************************************************************************/
@@ -193,6 +197,28 @@ found_middle:
 
 int paddr_to_color(unsigned long mask, unsigned long paddr)
 {
+	// If we have bank mapping functions from file, use them
+	if (!g_bank_functions.empty()) {
+		int color = 0;
+		
+		for (size_t func_idx = 0; func_idx < g_bank_functions.size(); func_idx++) {
+			int bit_result = 0;
+			
+			// XOR all the specified bits for this function
+			for (int bit_pos : g_bank_functions[func_idx]) {
+				bit_result ^= ((paddr >> bit_pos) & 0x1);
+			}
+			
+			// Set the corresponding bit in the color
+			if (bit_result) {
+				color |= (1 << func_idx);
+			}
+		}
+		
+		return color;
+	}
+	
+	// Fall back to original bitmask-based method
 	int color = 0;
 	int idx = 0;
 	unsigned long c = 0;
@@ -244,6 +270,44 @@ ulong get_paddr(ulong vaddr)
 void init_pagemap() {
     g_pagemap_fd = open("/proc/self/pagemap", O_RDONLY);
     assert(g_pagemap_fd >= 0);
+}
+
+// Read bank bit mapping functions from file
+void read_bank_map_file(const char* filename) {
+    FILE* fp = fopen(filename, "r");
+    if (!fp) {
+        fprintf(stderr, "Error: Cannot open map file %s\n", filename);
+        exit(1);
+    }
+
+    char line[256];
+    g_bank_functions.clear();
+
+    while (fgets(line, sizeof(line), fp)) {
+        // Skip empty lines and comments
+        if (line[0] == '\n' || line[0] == '#') continue;
+        std::vector<int> function_bits;
+        char* token = strtok(line, " \t\n");
+        while (token != nullptr) {
+            int bit = atoi(token);
+            function_bits.push_back(bit);
+            token = strtok(nullptr, " \t\n");
+        }
+        if (!function_bits.empty()) {
+            g_bank_functions.push_back(function_bits);
+        }
+    }
+    fclose(fp);
+    if (g_debug) {
+        printf("Loaded %zu bank mapping functions:\n", g_bank_functions.size());
+        for (size_t i = 0; i < g_bank_functions.size(); i++) {
+            printf("Function %zu: XOR bits ", i);
+            for (int bit : g_bank_functions[i]) {
+                printf("%d ", bit);
+            }
+            printf("\n");
+        }
+    }
 }
 
 /**************************************************************************
@@ -299,7 +363,7 @@ int main(int argc, char* argv[])
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt(argc, argv, "m:a:c:d:e:b:i:l:hx")) != -1) {
+	while ((opt = getopt(argc, argv, "m:a:c:d:e:b:i:l:f:hx")) != -1) {
 		switch (opt) {
 		case 'm': /* set memory size */
 			g_mem_size = 1024 * strtol(optarg, NULL, 0);
@@ -349,6 +413,10 @@ int main(int argc, char* argv[])
 			mlp = strtol(optarg, NULL, 0);
 			fprintf(stderr, "MLP=%d\n", mlp);
 			break;
+		case 'f': /* bank map file */
+			g_map_file = optarg;
+			fprintf(stderr, "Bank map file: %s\n", g_map_file);
+			break;
                 case 'x':
 			use_hugepage = (use_hugepage) ? 0: 1;
 			break;
@@ -361,6 +429,7 @@ int main(int argc, char* argv[])
 			printf("  -c <cpu>    : set CPU affinity (default: 0)\n");
 			printf("  -d <debug>  : debug level (default: 0)\n");
 			printf("  -e <color>  : select color (bank) for coloring\n");
+			printf("  -f <file>   : bank bit mapping file\n");
 			printf("  -p <prio>   : set process priority\n");
 			printf("  -i <iter>   : number of iterations (default: %ld)\n", (long)DEFAULT_ITER);
 			printf("  -l <mlp>    : memory-level parallelism (default: %d)\n", (int)DEFAULT_MLP);
@@ -371,6 +440,12 @@ int main(int argc, char* argv[])
 	}
 
 	init_pagemap(); // need to open /proc/self/pagemap
+	
+	// Read bank mapping file if specified
+	if (g_map_file) {
+		read_bank_map_file(g_map_file);
+	}
+	
 	printf("g_mem_size: %d (%d KB)\n", g_mem_size, g_mem_size/1024);
 
 	printf("sizeof(unsigned long): %d\n", (int)sizeof(unsigned long));
@@ -378,14 +453,31 @@ int main(int argc, char* argv[])
 	unsigned long c;
 	printf("\n");
 	if (g_color_cnt) {
-		int n_colors = 1; 
-		printf("bank bitmask: 0x%lx\n", bank_bitmask);
-		printf("bank bits: ");
-		for_each_set_bit(c, (&bank_bitmask), BITS_PER_LONG) {
-			printf("%d ", (int)c);
-			n_colors *= 2; // 2^n
+		int n_colors = 1;
+		
+		if (!g_bank_functions.empty()) {
+			// Using bank mapping functions from file
+			printf("Using bank mapping functions from file\n");
+			printf("Number of bank functions: %zu\n", g_bank_functions.size());
+			for (size_t i = 0; i < g_bank_functions.size(); i++) {
+				printf("Function %zu: XOR bits ", i);
+				for (int bit : g_bank_functions[i]) {
+					printf("%d ", bit);
+				}
+				printf("\n");
+			}
+			n_colors = 1 << g_bank_functions.size(); // 2^n_functions
+		} else {
+			// Using traditional bitmask
+			printf("bank bitmask: 0x%lx\n", bank_bitmask);
+			printf("bank bits: ");
+			for_each_set_bit(c, (&bank_bitmask), BITS_PER_LONG) {
+				printf("%d ", (int)c);
+				n_colors *= 2; // 2^n
+			}
+			printf("\n");
 		}
-		printf("\n");
+		
 		printf("total number of colors: %d\n", n_colors);
 		printf("selected colors: ");
 		for (int i = 0; i < g_color_cnt; i++) {
