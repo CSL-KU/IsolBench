@@ -353,7 +353,6 @@ int main(int argc, char* argv[])
 
 	long repeat = DEFAULT_ITER;
 	int mlp = DEFAULT_MLP;
-	int use_hugepage = 0;
 	struct timespec start, end;
 	int acc_type = READ;
 
@@ -363,7 +362,7 @@ int main(int argc, char* argv[])
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt(argc, argv, "m:a:c:d:e:b:i:l:f:hx")) != -1) {
+	while ((opt = getopt(argc, argv, "m:a:c:d:e:b:i:l:f:h")) != -1) {
 		switch (opt) {
 		case 'm': /* set memory size */
 			g_mem_size = 1024 * strtol(optarg, NULL, 0);
@@ -417,9 +416,6 @@ int main(int argc, char* argv[])
 			g_map_file = optarg;
 			fprintf(stderr, "Bank map file: %s\n", g_map_file);
 			break;
-                case 'x':
-			use_hugepage = (use_hugepage) ? 0: 1;
-			break;
 		case 'h': /* help */
 			printf("Usage: %s [options]\n", argv[0]);
 			printf("Options:\n");
@@ -433,7 +429,6 @@ int main(int argc, char* argv[])
 			printf("  -p <prio>   : set process priority\n");
 			printf("  -i <iter>   : number of iterations (default: %ld)\n", (long)DEFAULT_ITER);
 			printf("  -l <mlp>    : memory-level parallelism (default: %d)\n", (int)DEFAULT_MLP);
-			printf("  -x          : use hugepage\n");
 			exit(0);
 		}
 
@@ -496,23 +491,28 @@ int main(int argc, char* argv[])
 	clock_gettime(CLOCK_REALTIME, &start);
 
 	/* alloc memory. align to a page boundary */
-	if (use_hugepage) {
-		memchunk = (int *)mmap(0, 
-				       g_mem_size,
-				       PROT_READ | PROT_WRITE, 
-				       MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, 
-				       -1, 0);
-		if ((void *)memchunk == MAP_FAILED) {
-			perror("alloc failed");
-			exit(1);
-		}
-	} else {
-		memchunk = (int *)malloc(g_mem_size);
-		if (memchunk == NULL) {
-			perror("alloc failed");
-			exit(1);
-		}
-		printf("Using malloc(), not very accurate\n");
+    // try 1GB huge page
+    memchunk = (int *)mmap(NULL, g_mem_size, PROT_READ | PROT_WRITE,
+                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_POPULATE |
+                    (30 << MAP_HUGE_SHIFT), -1, 0);
+    if ((void *)memchunk == MAP_FAILED) {
+        // try 2MB huge page
+        memchunk = (int *)mmap(NULL, g_mem_size, PROT_READ | PROT_WRITE,
+                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_POPULATE,
+                        -1, 0);
+        if ((void *)memchunk == MAP_FAILED) {
+            // nomal page allocation
+            memchunk = (int *)mmap(NULL, g_mem_size, PROT_READ | PROT_WRITE,
+                            MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
+            if ((void *)memchunk == MAP_FAILED) {
+                perror("alloc failed");
+                exit(1);
+            } else
+                printf("small page mapping (%u KB)\n", getpagesize() / 1024);
+        } else
+            printf("%s huge page mapping\n", "2MB");
+    } else {
+        printf("%s huge page mapping\n", "1GB");
 	}
 
 	/* initialize data */
@@ -568,8 +568,6 @@ int main(int argc, char* argv[])
 		// printf("%8d ->%8d\n", myvector[i], next_idx*4/UNIT_SIZE);
 	}
 	
-	if (use_hugepage) printf("Using hugetlb\n");
-
 #if 0
         param.sched_priority = 1;
         if(sched_setscheduler(0, SCHED_FIFO, &param) == -1) {
