@@ -69,10 +69,10 @@ enum access_type { READ, WRITE};
 /**************************************************************************
  * Global Variables
  **************************************************************************/
-static int g_mem_size = (DEFAULT_ALLOC_SIZE_KB*1024);
-static int g_unit_size = 16; // 64B
-static int* list[MAX_MLP];
-static int next[MAX_MLP];
+static int64_t g_mem_size = (DEFAULT_ALLOC_SIZE_KB*1024);
+static int64_t g_unit_size = 16; // 64B
+static int64_t* list[MAX_MLP];
+static int64_t next[MAX_MLP];
 
 static int g_debug = 0;
 static int g_color[MAX_COLORS]; // not assigned
@@ -240,7 +240,7 @@ ulong get_paddr(ulong vaddr)
 {
 	ulong value;
 	int page_size = getpagesize();
-	off_t offset = (vaddr / page_size) * sizeof(value);
+	off64_t offset = (vaddr / page_size) * sizeof(value);
 	assert(g_pagemap_fd >= 0);
 	
 	// Check if we have root permission to read frame numbers
@@ -348,7 +348,7 @@ int main(int argc, char* argv[])
 	int num_processors;
 	int cpuid = 0;
 
-	int *memchunk = NULL;
+	int64_t *memchunk = NULL;
 	int opt, prio;
 	int i;
 
@@ -358,15 +358,18 @@ int main(int argc, char* argv[])
 	int acc_type = READ;
 
 	std::srand (0);
-	std::vector<int> myvector;
+	std::vector<int64_t> myvector;
 
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt(argc, argv, "m:u:a:c:d:e:b:i:l:f:h")) != -1) {
+	while ((opt = getopt(argc, argv, "m:g:u:a:c:d:e:b:i:l:f:h")) != -1) {
 		switch (opt) {
 		case 'm': /* set memory size */
 			g_mem_size = 1024 * strtol(optarg, NULL, 0);
+			break;
+		case 'g': /* set memory size in GB */
+			g_mem_size = (1024*1024*1024) * strtol(optarg, NULL, 0);
 			break;
 		case 'u': /* set unit size */
 			g_unit_size = strtol(optarg, NULL, 0);
@@ -428,6 +431,8 @@ int main(int argc, char* argv[])
 			printf("Usage: %s [options]\n", argv[0]);
 			printf("Options:\n");
 			printf("  -m <size>   : memory size in KB (default: %d)\n", DEFAULT_ALLOC_SIZE_KB);
+			printf("  -g <size>   : memory size in GB\n");
+			printf("  -u <size>   : unit size in bytes (default: %ld)\n", g_unit_size);
 			printf("  -a <type>   : access type (read|write, default: read)\n");
 			printf("  -b <mask>   : bank bitmask (default: 0x%lx)\n", bank_bitmask);
 			printf("  -c <cpu>    : set CPU affinity (default: 0)\n");
@@ -449,8 +454,8 @@ int main(int argc, char* argv[])
 		read_bank_map_file(g_map_file);
 	}
 	
-	printf("g_mem_size: %d (%d KB)\n", g_mem_size, g_mem_size/1024);
-	printf("g_unit_size: %d (%d KB)\n", g_unit_size, g_unit_size/1024);
+	printf("g_mem_size: %ld (%ld KB)\n", g_mem_size, g_mem_size/1024);
+	printf("g_unit_size: %ld (%ld KB)\n", g_unit_size, g_unit_size/1024);
 	printf("access type: %s\n", (acc_type == READ) ? "read" : "write");
 
 	unsigned long c;
@@ -491,26 +496,26 @@ int main(int argc, char* argv[])
 	
 	srand(0);
 
-	int ws = 0;
-	int orig_ws = (g_mem_size / g_unit_size);
+	int64_t ws = 0;
+	int64_t orig_ws = (g_mem_size / g_unit_size);
 
-	printf("orig_ws: %d  mlp: %d\n", orig_ws, mlp);
-	
+	printf("orig_ws: %ld  mlp: %d\n", orig_ws, mlp);
+
 	clock_gettime(CLOCK_REALTIME, &start);
 
 	/* alloc memory. align to a page boundary */
     // try 1GB huge page
-    memchunk = (int *)mmap(NULL, g_mem_size, PROT_READ | PROT_WRITE,
+    memchunk = (int64_t *)mmap(NULL, g_mem_size, PROT_READ | PROT_WRITE,
                     MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_POPULATE |
                     (30 << MAP_HUGE_SHIFT), -1, 0);
     if ((void *)memchunk == MAP_FAILED) {
         // try 2MB huge page
-        memchunk = (int *)mmap(NULL, g_mem_size, PROT_READ | PROT_WRITE,
+        memchunk = (int64_t *)mmap(NULL, g_mem_size, PROT_READ | PROT_WRITE,
                         MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_POPULATE,
                         -1, 0);
         if ((void *)memchunk == MAP_FAILED) {
             // nomal page allocation
-            memchunk = (int *)mmap(NULL, g_mem_size, PROT_READ | PROT_WRITE,
+            memchunk = (int64_t *)mmap(NULL, g_mem_size, PROT_READ | PROT_WRITE,
                             MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
             if ((void *)memchunk == MAP_FAILED) {
                 perror("alloc failed");
@@ -528,7 +533,7 @@ int main(int argc, char* argv[])
 
 	// set some values:
 	for (int i=0; i<orig_ws; i++) {
-		ulong vaddr = (ulong)&memchunk[i*g_unit_size/4];
+		ulong vaddr = (ulong)&memchunk[i*g_unit_size/8];
 
 		if (g_color_cnt > 0) {
 			/* use coloring */
@@ -554,23 +559,23 @@ int main(int argc, char* argv[])
 
 	// update the workingset size
 	ws = myvector.size() / mlp * mlp; 
-	printf("new ws: %d\n", ws);
-	int list_len = ws / mlp;
-	printf("list_len: %d\n", list_len);
+	printf("new ws: %ld\n", ws);
+	int64_t list_len = ws / mlp;
+	printf("list_len: %ld\n", list_len);
 	
 	for (i = 0; i < ws; i++) {
-		int l = i / list_len;
-		int curr_idx = myvector[i] * g_unit_size / 4;
-		int next_idx = myvector[i+1] * g_unit_size / 4;
+		int64_t l = i / list_len;
+		int64_t curr_idx = myvector[i] * g_unit_size / 8;
+		int64_t next_idx = myvector[i+1] * g_unit_size / 8;
 		if ((i+1) % list_len == 0)
-			next_idx = myvector[i/list_len*list_len] * g_unit_size / 4;
-		
+			next_idx = myvector[i/list_len*list_len] * g_unit_size / 8;
+
 		memchunk[curr_idx] = next_idx;
 		
 		if (i % list_len == 0) {
 			list[l] = memchunk;
 			next[l] = curr_idx;
-			printf("list[%d]  %d\n", l,  next[l] * 4 / g_unit_size);
+			printf("list[%ld]  %ld\n", l,  next[l] * 8 / g_unit_size);
 		}
 		
 		// printf("%8d ->%8d\n", myvector[i], next_idx*4/g_unit_size);
@@ -599,9 +604,9 @@ int main(int argc, char* argv[])
 	int64_t nsdiff = get_elapsed(&start, &end);
 	double  avglat = (double)nsdiff/naccess;
 
-	printf("alloc. size: %d (%d KB)\n", g_mem_size, g_mem_size/1024);
-	int total_ws =  ws * LINE_SIZE;
-	printf("ws size: %d (%d KB)\n", total_ws, total_ws / 1024);
+	printf("alloc. size: %ld (%ld KB)\n", g_mem_size, g_mem_size/1024);
+	int64_t total_ws =  ws * LINE_SIZE;
+	printf("ws size: %ld (%ld KB)\n", total_ws, total_ws / 1024);
 	printf("duration %.0f ns, #access %ld\n", (double)nsdiff, naccess);
 	printf("Avg. latency %.2f ns\n", avglat);	
 	printf("bandwidth %.2f MB/s\n", (double)64*1000*naccess/nsdiff);
