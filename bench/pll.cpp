@@ -42,7 +42,6 @@
  * Public Definitions
  **************************************************************************/
 #define MAX_MLP 64
-#define UNIT_SIZE 16	// per item size (bytes)
 #ifdef __arm__
 #  define DEFAULT_ALLOC_SIZE_KB 4096
 #else
@@ -50,6 +49,7 @@
 #endif
 #define DEFAULT_ITER 100
 #define DEFAULT_MLP 1
+#define LINE_SIZE 64
 
 #ifdef __LP64__
 #define BITS_PER_LONG 64
@@ -70,6 +70,7 @@ enum access_type { READ, WRITE};
  * Global Variables
  **************************************************************************/
 static int g_mem_size = (DEFAULT_ALLOC_SIZE_KB*1024);
+static int g_unit_size = 16; // 64B
 static int* list[MAX_MLP];
 static int next[MAX_MLP];
 
@@ -362,10 +363,17 @@ int main(int argc, char* argv[])
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt(argc, argv, "m:a:c:d:e:b:i:l:f:h")) != -1) {
+	while ((opt = getopt(argc, argv, "m:u:a:c:d:e:b:i:l:f:h")) != -1) {
 		switch (opt) {
 		case 'm': /* set memory size */
 			g_mem_size = 1024 * strtol(optarg, NULL, 0);
+			break;
+		case 'u': /* set unit size */
+			g_unit_size = strtol(optarg, NULL, 0);
+			if (g_unit_size % 4 != 0) {
+				fprintf(stderr, "unit size must be multiple of 4\n");
+				exit(1);
+			}
 			break;
 		case 'a': /* set access type */
 			if (!strncmp(optarg, "read", 4))
@@ -442,9 +450,9 @@ int main(int argc, char* argv[])
 	}
 	
 	printf("g_mem_size: %d (%d KB)\n", g_mem_size, g_mem_size/1024);
+	printf("g_unit_size: %d (%d KB)\n", g_unit_size, g_unit_size/1024);
+	printf("access type: %s\n", (acc_type == READ) ? "read" : "write");
 
-	printf("sizeof(unsigned long): %d\n", (int)sizeof(unsigned long));
-	printf("BITS_PER_LONG: %d\n", BITS_PER_LONG);
 	unsigned long c;
 	printf("\n");
 	if (g_color_cnt) {
@@ -484,7 +492,7 @@ int main(int argc, char* argv[])
 	srand(0);
 
 	int ws = 0;
-	int orig_ws = (g_mem_size / UNIT_SIZE);
+	int orig_ws = (g_mem_size / g_unit_size);
 
 	printf("orig_ws: %d  mlp: %d\n", orig_ws, mlp);
 	
@@ -520,7 +528,7 @@ int main(int argc, char* argv[])
 
 	// set some values:
 	for (int i=0; i<orig_ws; i++) {
-		ulong vaddr = (ulong)&memchunk[i*UNIT_SIZE/4];
+		ulong vaddr = (ulong)&memchunk[i*g_unit_size/4];
 
 		if (g_color_cnt > 0) {
 			/* use coloring */
@@ -552,20 +560,20 @@ int main(int argc, char* argv[])
 	
 	for (i = 0; i < ws; i++) {
 		int l = i / list_len;
-		int curr_idx = myvector[i] * UNIT_SIZE / 4;
-		int next_idx = myvector[i+1] * UNIT_SIZE / 4;
+		int curr_idx = myvector[i] * g_unit_size / 4;
+		int next_idx = myvector[i+1] * g_unit_size / 4;
 		if ((i+1) % list_len == 0)
-			next_idx = myvector[i/list_len*list_len] * UNIT_SIZE / 4;
+			next_idx = myvector[i/list_len*list_len] * g_unit_size / 4;
 		
 		memchunk[curr_idx] = next_idx;
 		
 		if (i % list_len == 0) {
 			list[l] = memchunk;
 			next[l] = curr_idx;
-			printf("list[%d]  %d\n", l,  next[l] * 4 / UNIT_SIZE);
+			printf("list[%d]  %d\n", l,  next[l] * 4 / g_unit_size);
 		}
 		
-		// printf("%8d ->%8d\n", myvector[i], next_idx*4/UNIT_SIZE);
+		// printf("%8d ->%8d\n", myvector[i], next_idx*4/g_unit_size);
 	}
 	
 #if 0
@@ -592,7 +600,7 @@ int main(int argc, char* argv[])
 	double  avglat = (double)nsdiff/naccess;
 
 	printf("alloc. size: %d (%d KB)\n", g_mem_size, g_mem_size/1024);
-	int total_ws =  ws * UNIT_SIZE;
+	int total_ws =  ws * LINE_SIZE;
 	printf("ws size: %d (%d KB)\n", total_ws, total_ws / 1024);
 	printf("duration %.0f ns, #access %ld\n", (double)nsdiff, naccess);
 	printf("Avg. latency %.2f ns\n", avglat);	
