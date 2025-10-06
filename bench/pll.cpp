@@ -70,7 +70,7 @@ enum access_type { READ, WRITE};
  * Global Variables
  **************************************************************************/
 static int64_t g_mem_size = (DEFAULT_ALLOC_SIZE_KB*1024);
-static int64_t g_unit_size = 16; // 64B
+static int64_t g_unit_size = 64; // 64B
 static int64_t* list[MAX_MLP];
 static int64_t next[MAX_MLP];
 
@@ -363,10 +363,13 @@ int main(int argc, char* argv[])
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt(argc, argv, "m:g:u:a:c:d:e:b:i:l:f:h")) != -1) {
+	while ((opt = getopt(argc, argv, "k:m:g:u:a:c:d:e:b:i:l:f:h")) != -1) {
 		switch (opt) {
-		case 'm': /* set memory size */
+		case 'k': /* set memory size in KB */
 			g_mem_size = 1024 * strtol(optarg, NULL, 0);
+			break;
+		case 'm': /* set memory size in MB */
+			g_mem_size = (1024*1024) * strtol(optarg, NULL, 0);
 			break;
 		case 'g': /* set memory size in GB */
 			g_mem_size = (1024*1024*1024) * strtol(optarg, NULL, 0);
@@ -605,7 +608,7 @@ int main(int argc, char* argv[])
 	double  avglat = (double)nsdiff/naccess;
 
 	printf("alloc. size: %ld (%ld KB)\n", g_mem_size, g_mem_size/1024);
-	int64_t total_ws =  ws * LINE_SIZE;
+	int64_t total_ws =  ws * g_unit_size;
 	printf("ws size: %ld (%ld KB)\n", total_ws, total_ws / 1024);
 	printf("duration %.0f ns, #access %ld\n", (double)nsdiff, naccess);
 	printf("Avg. latency %.2f ns\n", avglat);	
