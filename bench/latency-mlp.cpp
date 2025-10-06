@@ -330,7 +330,7 @@ int main(int argc, char* argv[])
 			mlp = strtol(optarg, NULL, 0);
 			fprintf(stderr, "MLP=%d\n", mlp);
 			break;
-                case 'x':
+		case 'x':
 			use_hugepage = (use_hugepage) ? 0: 1;
 			break;
 		}
