@@ -42,11 +42,7 @@
  * Public Definitions
  **************************************************************************/
 #define MAX_MLP 64
-#ifdef __arm__
-#  define DEFAULT_ALLOC_SIZE_KB 4096
-#else
-#  define DEFAULT_ALLOC_SIZE_KB 16384
-#endif
+#define DEFAULT_ALLOC_SIZE_KB 16384
 #define DEFAULT_ITER 100
 #define DEFAULT_MLP 1
 #define LINE_SIZE 64

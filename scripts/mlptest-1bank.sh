@@ -26,7 +26,7 @@ killall pll >& /dev/null
 
 for l in `seq 1 $mlp`; do
     for c in `seq $c_start $c_end`; do
-	    pll -c $c -l $l -i 20000 -m $memsize -f map.txt -e 0 >& /tmp/pll-$l-$c.log &
+	    pll -c $c -l $l -i 1000000 -m $memsize -f map.txt -e 0 >& /tmp/pll-$l-$c.log &
     done
     sleep 0.5
     pll -c $st -l $l -i 50 -m $memsize -f map.txt -e 0 2> /tmp/err.txt
@@ -42,9 +42,9 @@ done  > /tmp/test.txt
 BWS=`grep bandwidth /tmp/test.txt | awk '{ print $2 }'`
 
 for b in $BWS; do
-    echo $b $(float_eval "$b * ( $corun + 1)")
+    echo $b, $(float_eval "$b * ( $corun + 1)")
 done > out.txt
 cat out.txt
 
-echo "corun=$1" >> out.log
+echo "maxmlp=$1, corun=$2" >> out.log
 awk '{ print $2 }' out.txt >> out.log
