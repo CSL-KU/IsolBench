@@ -103,7 +103,6 @@ void usage(int argc, char *argv[])
 	printf("Usage: $ %s [<option>]*\n\n", argv[0]);
 	printf("-m: memory size in KB. default=%d MB\n", DEFAULT_ALLOC_SIZE_KB);
 	printf("-a: access type - read, write. default=read\n");
-	printf("-n: addressing pattern - Seq, Row, Bank. default=Seq\n");
 	printf("-t: time to run in sec. 0 means indefinite. default=5. \n");
 	printf("-x: use hugepage. default=0\n");
 	printf("-r: set real-time priority. default=0\n");
@@ -135,7 +134,7 @@ int main(int argc, char *argv[])
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt(argc, argv, "m:a:n:t:c:i:p:r:f:l:xh")) != -1) {
+	while ((opt = getopt(argc, argv, "m:a:t:c:i:p:r:f:l:xh")) != -1) {
 		switch (opt) {
 		case 'm': /* set memory size */
 			if (optarg[strlen(optarg)-1] == 'G' || optarg[strlen(optarg)-1] == 'g')
