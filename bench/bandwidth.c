@@ -79,7 +79,7 @@ void quit(int param)
 
 int64_t bench_read()
 {
-	int64_t i;	
+	int64_t i;
 	int64_t sum = 0;
 	for ( i = 0; i < g_mem_size/4; i+=(CACHE_LINE_SIZE/4) ) {
 		sum += g_mem_ptr[i];
@@ -90,7 +90,7 @@ int64_t bench_read()
 
 int bench_write()
 {
-	register int64_t i;	
+	register int64_t i;
 	for ( i = 0; i < g_mem_size/4; i+=(CACHE_LINE_SIZE/4) ) {
 		g_mem_ptr[i] = i;
 	}
@@ -101,8 +101,7 @@ int bench_write()
 void usage(int argc, char *argv[])
 {
 	printf("Usage: $ %s [<option>]*\n\n", argv[0]);
-	printf("-k: memory size in KB. default=%d KB\n", DEFAULT_ALLOC_SIZE_KB);
-	printf("-m: memory size in MB. default=%d MB\n", DEFAULT_ALLOC_SIZE_KB/1024);
+	printf("-m: memory size in KB. default=%d MB\n", DEFAULT_ALLOC_SIZE_KB);
 	printf("-a: access type - read, write. default=read\n");
 	printf("-n: addressing pattern - Seq, Row, Bank. default=Seq\n");
 	printf("-t: time to run in sec. 0 means indefinite. default=5. \n");
@@ -140,11 +139,11 @@ int main(int argc, char *argv[])
 		switch (opt) {
 		case 'm': /* set memory size */
 			if (optarg[strlen(optarg)-1] == 'G' || optarg[strlen(optarg)-1] == 'g')
-				g_mem_size = 1024 * 1024 * 1024 * strtol(optarg, NULL, 0);
+				g_mem_size = 1024 * 1024 * 1024 * strtol(optarg, NULL, 0); // GB
 			else if (optarg[strlen(optarg)-1] == 'M' || optarg[strlen(optarg)-1] == 'm')
-				g_mem_size = 1024 * 1024 * strtol(optarg, NULL, 0);
+				g_mem_size = 1024 * 1024 * strtol(optarg, NULL, 0); // MB
 			else
-				g_mem_size = 1024 * strtol(optarg, NULL, 0);
+				g_mem_size = 1024 * strtol(optarg, NULL, 0); // KB
 			break;
 		case 'a': /* set access type */
 			if (!strcmp(optarg, "read"))
