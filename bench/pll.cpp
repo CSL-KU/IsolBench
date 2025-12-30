@@ -429,7 +429,8 @@ int main(int argc, char* argv[])
 		case 'h': /* help */
 			printf("Usage: %s [options]\n", argv[0]);
 			printf("Options:\n");
-			printf("  -m <size>   : memory size in KB (default: %d)\n", DEFAULT_ALLOC_SIZE_KB);
+			printf("  -k <size>   : memory size in KB (default: %d)\n", DEFAULT_ALLOC_SIZE_KB);
+			printf("  -m <size>   : memory size in MB\n");
 			printf("  -g <size>   : memory size in GB\n");
 			printf("  -u <size>   : unit size in bytes (default: %ld)\n", g_unit_size);
 			printf("  -a <type>   : access type (read|write, default: read)\n");
