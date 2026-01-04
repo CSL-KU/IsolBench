@@ -79,9 +79,6 @@ static int g_color_cnt = 0;
 
 static int g_pagemap_fd = -1;
 
-// static unsigned long bank_bitmask = 0x1e000; // 16|15,14,13,--| : xu4 (cortex-a15)
-static unsigned long bank_bitmask = 0x7800;  // --,14,13,12|11  : pi4 (cortex-a72)
-
 // XOR mapping functions
 static std::vector<std::vector<int>> g_dram_functions;
 static std::vector<std::vector<int>> g_llc_functions;
@@ -385,7 +382,7 @@ int main(int argc, char* argv[])
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt_long(argc, argv, "k:m:g:u:a:c:d:e:b:i:l:f:h", long_options, &option_index)) != -1) {
+	while ((opt = getopt_long(argc, argv, "k:m:g:u:a:c:d:e:i:l:f:h", long_options, &option_index)) != -1) {
 		switch (opt) {
 		case 1000: // dram_map
 			g_dram_map_file = optarg;
@@ -422,9 +419,6 @@ int main(int argc, char* argv[])
 				acc_type = WRITE;
 			else
 				exit(1);
-			break;
-		case 'b':
-			bank_bitmask = strtol(optarg, NULL, 0);
 			break;
 		case 'c': /* set CPU affinity */
 			cpuid = strtol(optarg, NULL, 0);
@@ -472,7 +466,6 @@ int main(int argc, char* argv[])
 			printf("  -g <size>   : memory size in GB\n");
 			printf("  -u <size>   : unit size in bytes (default: %ld)\n", g_unit_size);
 			printf("  -a <type>   : access type (read|write, default: read)\n");
-			printf("  -b <mask>   : bank bitmask (default: 0x%lx)\n", bank_bitmask);
 			printf("  -c <cpu>    : set CPU affinity (default: 0)\n");
 			printf("  -d <debug>  : debug level (default: 0)\n");
 			printf("  -e <color>  : select color (bank) for coloring\n");
@@ -498,15 +491,6 @@ int main(int argc, char* argv[])
         read_xor_map_file(g_llc_map_file, g_llc_functions);
     }
 
-    // Fallback to bitmask if no DRAM functions loaded
-    if (g_dram_functions.empty()) {
-        unsigned long c;
-        for_each_set_bit(c, &bank_bitmask, BITS_PER_LONG) {
-            std::vector<int> func;
-            func.push_back((int)c);
-            g_dram_functions.push_back(func);
-        }
-    }
 
     // Merge legacy colors into selected dram banks
     for (int i = 0; i < g_color_cnt; i++) {
