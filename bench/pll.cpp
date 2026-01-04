@@ -37,6 +37,9 @@
 #include <sys/resource.h>
 #include <assert.h>
 #include <random>
+#include <getopt.h>
+#include <string>
+#include <sstream>
 
 /**************************************************************************
  * Public Definitions
@@ -79,9 +82,15 @@ static int g_pagemap_fd = -1;
 // static unsigned long bank_bitmask = 0x1e000; // 16|15,14,13,--| : xu4 (cortex-a15)
 static unsigned long bank_bitmask = 0x7800;  // --,14,13,12|11  : pi4 (cortex-a72)
 
-// Bank bit mapping from file
-static std::vector<std::vector<int>> g_bank_functions;
-static char* g_map_file = nullptr;
+// XOR mapping functions
+static std::vector<std::vector<int>> g_dram_functions;
+static std::vector<std::vector<int>> g_llc_functions;
+static char* g_dram_map_file = nullptr;
+static char* g_llc_map_file = nullptr;
+
+// Selected banks/slices
+static std::vector<int> g_selected_dram_banks;
+static std::vector<int> g_selected_llc_slices;
 
 /**************************************************************************
  * Public Function Prototypes
@@ -192,40 +201,48 @@ found_middle:
 	     (bit) < (size);					\
 	     (bit) = find_next_bit((addr), (size), (bit) + 1))
 
-int paddr_to_color(unsigned long mask, unsigned long paddr)
-{
-	// If we have bank mapping functions from file, use them
-	if (!g_bank_functions.empty()) {
-		int color = 0;
-		
-		for (size_t func_idx = 0; func_idx < g_bank_functions.size(); func_idx++) {
-			int bit_result = 0;
-			
-			// XOR all the specified bits for this function
-			for (int bit_pos : g_bank_functions[func_idx]) {
-				bit_result ^= ((paddr >> bit_pos) & 0x1);
-			}
-			
-			// Set the corresponding bit in the color
-			if (bit_result) {
-				color |= (1 << func_idx);
-			}
-		}
-		
-		return color;
-	}
-	
-	// Fall back to original bitmask-based method
-	int color = 0;
-	int idx = 0;
-	unsigned long c = 0;
-	for_each_set_bit(c, &mask, BITS_PER_LONG) {
-		if ((paddr >> (c)) & 0x1)
-			color |= (1<<idx);
-		idx++;
-	}
-	return color;
+void parse_list(char* str, std::vector<int>& list) {
+    char* token = strtok(str, ",");
+    while (token != nullptr) {
+        if (strchr(token, '-')) {
+            int start, end;
+            sscanf(token, "%d-%d", &start, &end);
+            for (int i = start; i <= end; i++) {
+                list.push_back(i);
+            }
+        } else {
+            list.push_back(atoi(token));
+        }
+        token = strtok(nullptr, ",");
+    }
 }
+
+int get_id(unsigned long paddr, const std::vector<std::vector<int>>& functions) {
+    int id = 0;
+    for (size_t func_idx = 0; func_idx < functions.size(); func_idx++) {
+        int bit_result = 0;
+        for (int bit_pos : functions[func_idx]) {
+            bit_result ^= ((paddr >> bit_pos) & 0x1);
+        }
+        if (bit_result) {
+            id |= (1 << func_idx);
+        }
+    }
+    return id;
+}
+
+int get_dram_bank(unsigned long paddr) {
+    if (g_dram_functions.empty()) return -1;
+    return get_id(paddr, g_dram_functions);
+}
+
+int get_llc_slice(unsigned long paddr) {
+    if (g_llc_functions.empty()) return -1;
+    return get_id(paddr, g_llc_functions);
+}
+
+// Legacy support for paddr_to_color if needed, or we can remove it.
+// For now, I'll remove it as we are refactoring.
 
 
 size_t get_frame_number_from_pagemap(size_t value) {
@@ -269,8 +286,8 @@ void init_pagemap() {
     assert(g_pagemap_fd >= 0);
 }
 
-// Read bank bit mapping functions from file
-void read_bank_map_file(const char* filename) {
+// Read XOR mapping functions from file
+void read_xor_map_file(const char* filename, std::vector<std::vector<int>>& functions) {
     FILE* fp = fopen(filename, "r");
     if (!fp) {
         fprintf(stderr, "Error: Cannot open map file %s\n", filename);
@@ -278,7 +295,7 @@ void read_bank_map_file(const char* filename) {
     }
 
     char line[256];
-    g_bank_functions.clear();
+    functions.clear();
 
     while (fgets(line, sizeof(line), fp)) {
         // Skip empty lines and comments
@@ -291,15 +308,15 @@ void read_bank_map_file(const char* filename) {
             token = strtok(nullptr, " \t\n");
         }
         if (!function_bits.empty()) {
-            g_bank_functions.push_back(function_bits);
+            functions.push_back(function_bits);
         }
     }
     fclose(fp);
     if (g_debug) {
-        printf("Loaded %zu bank mapping functions:\n", g_bank_functions.size());
-        for (size_t i = 0; i < g_bank_functions.size(); i++) {
+        printf("Loaded %zu mapping functions from %s:\n", functions.size(), filename);
+        for (size_t i = 0; i < functions.size(); i++) {
             printf("Function %zu: XOR bits ", i);
-            for (int bit : g_bank_functions[i]) {
+            for (int bit : functions[i]) {
                 printf("%d ", bit);
             }
             printf("\n");
@@ -356,11 +373,32 @@ int main(int argc, char* argv[])
 	std::srand (0);
 	std::vector<int64_t> myvector;
 
+	static struct option long_options[] = {
+		{"dram_map", required_argument, 0, 1000},
+		{"llc_map", required_argument, 0, 1001},
+		{"dram_banks", required_argument, 0, 1002},
+		{"llc_slices", required_argument, 0, 1003},
+		{0, 0, 0, 0}
+	};
+	int option_index = 0;
+
 	/*
 	 * get command line options 
 	 */
-	while ((opt = getopt(argc, argv, "k:m:g:u:a:c:d:e:b:i:l:f:h")) != -1) {
+	while ((opt = getopt_long(argc, argv, "k:m:g:u:a:c:d:e:b:i:l:f:h", long_options, &option_index)) != -1) {
 		switch (opt) {
+		case 1000: // dram_map
+			g_dram_map_file = optarg;
+			break;
+		case 1001: // llc_map
+			g_llc_map_file = optarg;
+			break;
+		case 1002: // dram_banks
+			parse_list(optarg, g_selected_dram_banks);
+			break;
+		case 1003: // llc_slices
+			parse_list(optarg, g_selected_llc_slices);
+			break;
 		case 'k': /* set memory size in KB */
 			g_mem_size = 1024 * strtol(optarg, NULL, 0);
 			break;
@@ -423,8 +461,8 @@ int main(int argc, char* argv[])
 			fprintf(stderr, "MLP=%d\n", mlp);
 			break;
 		case 'f': /* bank map file */
-			g_map_file = optarg;
-			fprintf(stderr, "Bank map file: %s\n", g_map_file);
+			g_dram_map_file = optarg;
+			fprintf(stderr, "Bank map file (mapped to dram_map): %s\n", g_dram_map_file);
 			break;
 		case 'h': /* help */
 			printf("Usage: %s [options]\n", argv[0]);
@@ -441,6 +479,10 @@ int main(int argc, char* argv[])
 			printf("  -p <prio>   : set process priority\n");
 			printf("  -i <iter>   : number of iterations (default: %ld)\n", (long)DEFAULT_ITER);
 			printf("  -l <mlp>    : memory-level parallelism (default: %d)\n", (int)DEFAULT_MLP);
+            printf("  --dram_map <file> : DRAM XOR map file\n");
+            printf("  --llc_map <file>  : LLC XOR map file\n");
+            printf("  --dram_banks <list>: Selected DRAM banks (e.g. 0-3,5)\n");
+            printf("  --llc_slices <list>: Selected LLC slices (e.g. 0,1)\n");
 			exit(0);
 		}
 
@@ -448,50 +490,56 @@ int main(int argc, char* argv[])
 
 	init_pagemap(); // need to open /proc/self/pagemap
 	
-	// Read bank mapping file if specified
-	if (g_map_file) {
-		read_bank_map_file(g_map_file);
+	if (g_dram_map_file) {
+		read_xor_map_file(g_dram_map_file, g_dram_functions);
 	}
+    if (g_llc_map_file) {
+        read_xor_map_file(g_llc_map_file, g_llc_functions);
+    }
+
+    // Fallback to bitmask if no DRAM functions loaded
+    if (g_dram_functions.empty()) {
+        unsigned long c;
+        for_each_set_bit(c, &bank_bitmask, BITS_PER_LONG) {
+            std::vector<int> func;
+            func.push_back((int)c);
+            g_dram_functions.push_back(func);
+        }
+    }
+
+    // Merge legacy colors into selected dram banks
+    for (int i = 0; i < g_color_cnt; i++) {
+        g_selected_dram_banks.push_back(g_color[i]);
+    }
 	
 	printf("g_mem_size: %ld (%ld KB)\n", g_mem_size, g_mem_size/1024);
 	printf("g_unit_size: %ld (%ld KB)\n", g_unit_size, g_unit_size/1024);
 	printf("access type: %s\n", (acc_type == READ) ? "read" : "write");
 
-	unsigned long c;
 	printf("\n");
-	if (g_color_cnt) {
-		int n_colors = 1;
-		
-		if (!g_bank_functions.empty()) {
-			// Using bank mapping functions from file
-			printf("Using bank mapping functions from file\n");
-			printf("Number of bank functions: %zu\n", g_bank_functions.size());
-			for (size_t i = 0; i < g_bank_functions.size(); i++) {
-				printf("Function %zu: XOR bits ", i);
-				for (int bit : g_bank_functions[i]) {
-					printf("%d ", bit);
-				}
-				printf("\n");
-			}
-			n_colors = 1 << g_bank_functions.size(); // 2^n_functions
-		} else {
-			// Using traditional bitmask
-			printf("bank bitmask: 0x%lx\n", bank_bitmask);
-			printf("bank bits: ");
-			for_each_set_bit(c, (&bank_bitmask), BITS_PER_LONG) {
-				printf("%d ", (int)c);
-				n_colors *= 2; // 2^n
-			}
-			printf("\n");
-		}
-		
-		printf("total number of colors: %d\n", n_colors);
-		printf("selected colors: ");
-		for (int i = 0; i < g_color_cnt; i++) {
-			printf("%d ", g_color[i]);
-		}
-		printf("\n");
-	}
+    if (!g_selected_dram_banks.empty()) {
+        printf("DRAM Mapping:\n");
+        for (size_t i = 0; i < g_dram_functions.size(); i++) {
+            printf("  Function %zu: XOR bits ", i);
+            for (int bit : g_dram_functions[i]) printf("%d ", bit);
+            printf("\n");
+        }
+        printf("Selected DRAM banks: ");
+        for (int b : g_selected_dram_banks) printf("%d ", b);
+        printf("\n");
+    }
+
+    if (!g_selected_llc_slices.empty()) {
+        printf("LLC Mapping:\n");
+        for (size_t i = 0; i < g_llc_functions.size(); i++) {
+            printf("  Function %zu: XOR bits ", i);
+            for (int bit : g_llc_functions[i]) printf("%d ", bit);
+            printf("\n");
+        }
+        printf("Selected LLC slices: ");
+        for (int s : g_selected_llc_slices) printf("%d ", s);
+        printf("\n");
+    }
 	
 	srand(0);
 
@@ -533,24 +581,39 @@ int main(int argc, char* argv[])
 	// set some values:
 	for (int i=0; i<orig_ws; i++) {
 		ulong vaddr = (ulong)&memchunk[i*g_unit_size/8];
+        bool selected = true;
 
-		if (g_color_cnt > 0) {
-			/* use coloring */
-			for (int j = 0; j < g_color_cnt; j++) {
-				ulong paddr = get_paddr(vaddr);
-				if (paddr_to_color(bank_bitmask, paddr) == g_color[j]) {
-					if (g_debug)
-						printf("vaddr: %p paddr: %p color: %d\n",
-						       (void *)vaddr,
-							   (void *)paddr,
-						       paddr_to_color(bank_bitmask, paddr));
-					myvector.push_back(i);
-				}
-			}
-		} else {
-			/* not using coloring */
-			myvector.push_back(i);			
-		}
+        if (!g_selected_dram_banks.empty() || !g_selected_llc_slices.empty()) {
+            ulong paddr = get_paddr(vaddr);
+
+            if (!g_selected_dram_banks.empty()) {
+                int bank = get_dram_bank(paddr);
+                bool found = false;
+                for (int b : g_selected_dram_banks) {
+                    if (b == bank) { found = true; break; }
+                }
+                if (!found) selected = false;
+            }
+
+            if (selected && !g_selected_llc_slices.empty()) {
+                int slice = get_llc_slice(paddr);
+                bool found = false;
+                for (int s : g_selected_llc_slices) {
+                    if (s == slice) { found = true; break; }
+                }
+                if (!found) selected = false;
+            }
+            
+            if (selected && g_debug) {
+                 printf("vaddr: %p paddr: %p dram: %d llc: %d\n",
+                       (void *)vaddr, (void *)paddr, 
+                       get_dram_bank(paddr), get_llc_slice(paddr));
+            }
+        }
+
+        if (selected) {
+            myvector.push_back(i);
+        }
 	}
 
 	// using built-in random generator:
