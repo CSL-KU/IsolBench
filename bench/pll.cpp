@@ -74,20 +74,20 @@ static int64_t* list[MAX_MLP];
 static int64_t next[MAX_MLP];
 
 static int g_debug = 0;
-static int g_color[MAX_COLORS]; // not assigned
-static int g_color_cnt = 0;
-
 static int g_pagemap_fd = -1;
 
 // XOR mapping functions
 static std::vector<std::vector<int>> g_dram_functions;
 static std::vector<std::vector<int>> g_llc_functions;
-static char* g_dram_map_file = nullptr;
-static char* g_llc_map_file = nullptr;
+static std::vector<std::vector<int>> g_llc_set_functions;
+static char* g_dram_bank_map_file = nullptr;
+static char* g_llc_slice_map_file = nullptr;
+static char* g_llc_set_map_file = nullptr;
 
 // Selected banks/slices
 static std::vector<int> g_selected_dram_banks;
 static std::vector<int> g_selected_llc_slices;
+static std::vector<int> g_selected_llc_sets;
 
 /**************************************************************************
  * Public Function Prototypes
@@ -238,8 +238,10 @@ int get_llc_slice(unsigned long paddr) {
     return get_id(paddr, g_llc_functions);
 }
 
-// Legacy support for paddr_to_color if needed, or we can remove it.
-// For now, I'll remove it as we are refactoring.
+int get_llc_set(unsigned long paddr) {
+    if (g_llc_set_functions.empty()) return -1;
+    return get_id(paddr, g_llc_set_functions);
+}
 
 
 size_t get_frame_number_from_pagemap(size_t value) {
@@ -371,10 +373,12 @@ int main(int argc, char* argv[])
 	std::vector<int64_t> myvector;
 
 	static struct option long_options[] = {
-		{"dram_map", required_argument, 0, 1000},
-		{"llc_map", required_argument, 0, 1001},
-		{"dram_banks", required_argument, 0, 1002},
+		{"dram_bank_map", required_argument, 0, 1000},
+		{"dram_banks", required_argument, 0, 1001},
+		{"llc_slice_map", required_argument, 0, 1002},
 		{"llc_slices", required_argument, 0, 1003},
+		{"llc_set_map", required_argument, 0, 1004},
+		{"llc_sets", required_argument, 0, 1005},
 		{0, 0, 0, 0}
 	};
 	int option_index = 0;
@@ -384,17 +388,23 @@ int main(int argc, char* argv[])
 	 */
 	while ((opt = getopt_long(argc, argv, "k:m:g:u:a:c:d:e:i:l:f:h", long_options, &option_index)) != -1) {
 		switch (opt) {
-		case 1000: // dram_map
-			g_dram_map_file = optarg;
+		case 1000: // dram_bank_map
+			g_dram_bank_map_file = optarg;
 			break;
-		case 1001: // llc_map
-			g_llc_map_file = optarg;
-			break;
-		case 1002: // dram_banks
+		case 1001: // dram_banks
 			parse_list(optarg, g_selected_dram_banks);
+			break;
+		case 1002: // llc_slice_map
+			g_llc_slice_map_file = optarg;
 			break;
 		case 1003: // llc_slices
 			parse_list(optarg, g_selected_llc_slices);
+			break;
+		case 1004: // llc_set_map
+			g_llc_set_map_file = optarg;
+			break;
+		case 1005: // llc_sets
+			parse_list(optarg, g_selected_llc_sets);
 			break;
 		case 'k': /* set memory size in KB */
 			g_mem_size = 1024 * strtol(optarg, NULL, 0);
@@ -436,9 +446,6 @@ int main(int argc, char* argv[])
 		case 'd': /* debug */
 			g_debug = strtol(optarg, NULL, 0);
 			break;
-		case 'e': /* select color (bank) */
-			g_color[g_color_cnt++] = strtol(optarg, NULL, 0);
-			break;	
 		case 'p': /* set priority */
 			prio = strtol(optarg, NULL, 0);
 			if (setpriority(PRIO_PROCESS, 0, prio) < 0)
@@ -454,10 +461,6 @@ int main(int argc, char* argv[])
 			mlp = strtol(optarg, NULL, 0);
 			fprintf(stderr, "MLP=%d\n", mlp);
 			break;
-		case 'f': /* bank map file */
-			g_dram_map_file = optarg;
-			fprintf(stderr, "Bank map file (mapped to dram_map): %s\n", g_dram_map_file);
-			break;
 		case 'h': /* help */
 			printf("Usage: %s [options]\n", argv[0]);
 			printf("Options:\n");
@@ -468,15 +471,15 @@ int main(int argc, char* argv[])
 			printf("  -a <type>   : access type (read|write, default: read)\n");
 			printf("  -c <cpu>    : set CPU affinity (default: 0)\n");
 			printf("  -d <debug>  : debug level (default: 0)\n");
-			printf("  -e <color>  : select color (bank) for coloring\n");
-			printf("  -f <file>   : bank bit mapping file\n");
 			printf("  -p <prio>   : set process priority\n");
 			printf("  -i <iter>   : number of iterations (default: %ld)\n", (long)DEFAULT_ITER);
 			printf("  -l <mlp>    : memory-level parallelism (default: %d)\n", (int)DEFAULT_MLP);
-            printf("  --dram_map <file> : DRAM XOR map file\n");
-            printf("  --llc_map <file>  : LLC XOR map file\n");
-            printf("  --dram_banks <list>: Selected DRAM banks (e.g. 0-3,5)\n");
-            printf("  --llc_slices <list>: Selected LLC slices (e.g. 0,1)\n");
+            printf("  --dram_bank_map <file> : DRAM XOR map file\n");
+            printf("  --dram_banks <list>    : Selected DRAM banks (e.g. 0-3,5)\n");
+            printf("  --llc_slice_map <file> : LLC XOR map file\n");
+            printf("  --llc_slices <list>    : Selected LLC slices (e.g. 0,1)\n");
+            printf("  --llc_set_map <file>   : LLC set XOR map file\n");
+            printf("  --llc_sets <list>  : Selected LLC sets (e.g. 0-3,5)\n");
 			exit(0);
 		}
 
@@ -484,18 +487,16 @@ int main(int argc, char* argv[])
 
 	init_pagemap(); // need to open /proc/self/pagemap
 	
-	if (g_dram_map_file) {
-		read_xor_map_file(g_dram_map_file, g_dram_functions);
+	if (g_dram_bank_map_file) {
+		read_xor_map_file(g_dram_bank_map_file, g_dram_functions);
 	}
-    if (g_llc_map_file) {
-        read_xor_map_file(g_llc_map_file, g_llc_functions);
+    if (g_llc_slice_map_file) {
+        read_xor_map_file(g_llc_slice_map_file, g_llc_functions);
+    }
+    if (g_llc_set_map_file) {
+        read_xor_map_file(g_llc_set_map_file, g_llc_set_functions);
     }
 
-
-    // Merge legacy colors into selected dram banks
-    for (int i = 0; i < g_color_cnt; i++) {
-        g_selected_dram_banks.push_back(g_color[i]);
-    }
 	
 	printf("g_mem_size: %ld (%ld KB)\n", g_mem_size, g_mem_size/1024);
 	printf("g_unit_size: %ld (%ld KB)\n", g_unit_size, g_unit_size/1024);
@@ -523,6 +524,18 @@ int main(int argc, char* argv[])
         }
         printf("Selected LLC slices: ");
         for (int s : g_selected_llc_slices) printf("%d ", s);
+        printf("\n");
+    }
+
+    if (!g_selected_llc_sets.empty()) {
+        printf("LLC Set Mapping:\n");
+        for (size_t i = 0; i < g_llc_set_functions.size(); i++) {
+            printf("  Function %zu: XOR bits ", i);
+            for (int bit : g_llc_set_functions[i]) printf("%d ", bit);
+            printf("\n");
+        }
+        printf("Selected LLC sets: ");
+        for (int s : g_selected_llc_sets) printf("%d ", s);
         printf("\n");
     }
 	
@@ -588,11 +601,20 @@ int main(int argc, char* argv[])
                 }
                 if (!found) selected = false;
             }
+
+            if (selected && !g_selected_llc_sets.empty()) {
+                int set = get_llc_set(paddr);
+                bool found = false;
+                for (int s : g_selected_llc_sets) {
+                    if (s == set) { found = true; break; }
+                }
+                if (!found) selected = false;
+            }
             
             if (selected && g_debug) {
-                 printf("vaddr: %p paddr: %p dram: %d llc: %d\n",
+                 printf("vaddr: %p paddr: %p dram: %d llc: %d set: %d\n",
                        (void *)vaddr, (void *)paddr, 
-                       get_dram_bank(paddr), get_llc_slice(paddr));
+                       get_dram_bank(paddr), get_llc_slice(paddr), get_llc_set(paddr));
             }
         }
 
