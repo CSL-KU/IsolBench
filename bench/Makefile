@@ -1,9 +1,7 @@
 CC = gcc
 CXX = g++
-
-GLOBAL_FLAGS = -O3 -Wall -march=native -g
-CFLAGS = -std=gnu17 $(GLOBAL_FLAGS)
-CXXFLAGS = -std=gnu++17 $(GLOBAL_FLAGS)
+CFLAGS = -O3 -Wall -march=native -g
+CXXFLAGS = $(CFLAGS)
 
 PGMS = latency bandwidth bandwidth-rt pll pagetype cpuhog
 
