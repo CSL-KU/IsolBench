@@ -77,7 +77,7 @@ int jobs = 0;
 int period = 0; /* in ms */
 int verbose = 0;
 int cpuid = 0;
-int thread_local = 0;
+int is_thread_local = 0;
 
 volatile uint64_t g_nread = 0;	           /* number of bytes read */
 volatile unsigned int g_start;		   /* starting time */
@@ -192,7 +192,7 @@ void worker(void *param)
 	/*
 	 * allocate contiguous region of memory 
 	 */
-	if (thread_local) {
+	if (is_thread_local) {
 		l_mem_ptr = malloc(g_mem_size);
 		memset(l_mem_ptr, 1, g_mem_size);
 	} else {
@@ -349,7 +349,7 @@ int main(int argc, char *argv[])
 			verbose = strtol(optarg, NULL, 0);
 			break;
 		case 'o':
-			thread_local = 1;
+			is_thread_local = 1;
 			break;
 		}
 	}
@@ -363,7 +363,7 @@ int main(int argc, char *argv[])
 	/* print experiment info before starting */
 	printf("mem=%d KB (%s), type=%s, nthreads=%d cpuid=%d, iterations=%d, jobs=%d, period=%d\n",
 	       g_mem_size/1024,
-	       (thread_local)? "private":"shared",
+	       (is_thread_local)? "private":"shared",
 	       ((acc_type==READ) ?"read": "write"),
 	       g_nthreads,
 	       cpuid,
