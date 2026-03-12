@@ -26,12 +26,12 @@ test_latency_vs_bandwidth()
         fi
 
         # launch a subject
-	[ -d "$CG_PALLOC_DIR" ] && echo $$ > $CG_PALLOC_DIR/subject/tasks
-	latency -m $size_in_kb_subject -c $startcpu -i 10000 -r 1 2> /dev/null > tmpout.txt
-	    
+        [ -d "$CG_PALLOC_DIR" ] && echo $$ > $CG_PALLOC_DIR/subject/tasks
+        latency -m $size_in_kb_subject -c $startcpu -i 10000 -r 1 2> /dev/null > tmpout.txt
+
         output=`grep average tmpout.txt | awk '{ print $2 }'`
-	log_echo $output
-    # cleanup >& /dev/null
+        log_echo $output
+        # cleanup >& /dev/null
     done	
     cleanup >& /dev/null
 }
@@ -60,17 +60,16 @@ test_bandwidth_vs_bandwidth()
         fi
 
         # launch a subject
-	[ -d "$CG_PALLOC_DIR" ] && echo $$ > $CG_PALLOC_DIR/subject/tasks
+        [ -d "$CG_PALLOC_DIR" ] && echo $$ > $CG_PALLOC_DIR/subject/tasks
         bandwidth -m $size_in_kb_subject -t 4 -c $startcpu -r 1 2> /dev/null > tmpout.txt
-        output=`grep average tmpout.txt | awk '{ print $10 }'`
-	log_echo $output
+        output=`grep average tmpout.txt | awk '{ print $11 }'`
+        log_echo $output
     done	
     cleanup >& /dev/null
 }
 
 print_env()
 {
-
     echo size_in_kb_subject=$size_in_kb_subject
     echo size_in_kb_corun=$size_in_kb_corun
     echo acc_type=$acc_type
@@ -78,7 +77,7 @@ print_env()
 
 cleanup >& /dev/null
 
-if [ -d "/sys/kernel/debug/palloc" ]; then
+if [ -d "/sys/kernel/debug/palloc" && -f "/sys/kernel/debug/palloc/use_mc_xor" ]; then
     echo "This kernel supports PALLOC. initialize."
     echo flush > /sys/kernel/debug/palloc/control
 
@@ -132,6 +131,10 @@ elif grep "W3530" /proc/cpuinfo; then
 elif grep "Ryzen 3 2200G" /proc/cpuinfo; then
     # ryzen apu
     llc_ws=1024
+    dram_ws=16384
+elif grep "i5-6200U" /proc/cpuinfo; then
+    # skylake
+    llc_ws=512
     dram_ws=16384
 else
     error "CPU specific 'llc_ws' and 'dram_ws' variables are not set"
