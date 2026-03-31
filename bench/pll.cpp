@@ -37,6 +37,7 @@
 #include <sys/resource.h>
 #include <assert.h>
 #include <random>
+#include <signal.h>
 
 /**************************************************************************
  * Public Definitions
@@ -82,10 +83,17 @@ static unsigned long bank_bitmask = 0x7800;  // --,14,13,12|11  : pi4 (cortex-a7
 // Bank bit mapping from file
 static std::vector<std::vector<int>> g_bank_functions;
 static char* g_map_file = nullptr;
+static volatile int keep_running = 1;
 
 /**************************************************************************
  * Public Function Prototypes
  **************************************************************************/
+
+void signal_handler(int sig) {
+	keep_running = 0;
+	//fflush(stdout);
+}
+
 uint64_t get_elapsed(struct timespec *start, struct timespec *end)
 {
 	uint64_t dur;
@@ -314,7 +322,7 @@ int64_t run(int64_t iter, int mlp)
 {
 	int64_t cnt = 0;
 
-	for (int64_t i = 0; i < iter; i++) {
+	for (int64_t i = 0; i < iter && keep_running; i++) {
 		for (int j = 0; j < mlp; j++) {
 			next[j] = list[j][next[j]];
 		}
@@ -327,7 +335,7 @@ int64_t run_write(int64_t iter, int mlp)
 {
 	int64_t cnt = 0;
 
-	for (int64_t i = 0; i < iter; i++) {
+	for (int64_t i = 0; i < iter && keep_running; i++) {
 		for (int j = 0; j < mlp; j++) {
 			list[j][next[j]+1] = 0xff; // write
 			next[j] = list[j][next[j]];
@@ -446,6 +454,9 @@ int main(int argc, char* argv[])
 		}
 
 	}
+
+	signal(SIGTERM, signal_handler);
+	signal(SIGINT, signal_handler);
 
 	init_pagemap(); // need to open /proc/self/pagemap
 	
