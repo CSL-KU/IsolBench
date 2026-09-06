@@ -63,6 +63,27 @@ unsigned int get_usecs()
 	return (time.tv_sec * 1000000 +	time.tv_usec);
 }
 
+unsigned long get_default_hugepage_size_kb()
+{
+	FILE *meminfo;
+	char name[32];
+	unsigned long size_kb;
+
+	meminfo = fopen("/proc/meminfo", "r");
+	if (meminfo == NULL)
+		return 0;
+
+	while (fscanf(meminfo, "%31s %lu kB", name, &size_kb) == 2) {
+		if (!strcmp(name, "Hugepagesize:")) {
+			fclose(meminfo);
+			return size_kb;
+		}
+	}
+
+	fclose(meminfo);
+	return 0;
+}
+
 void quit(int param)
 {
 	float dur_in_sec;
@@ -211,7 +232,11 @@ int main(int argc, char *argv[])
 				perror("mmap with hugepage failed");
 				exit(1);
 			} else {
-				printf("Using 2MB hugepage\n");
+				unsigned long hugepage_size_kb = get_default_hugepage_size_kb();
+				if (hugepage_size_kb > 0)
+					printf("Using %luKB default hugepage\n", hugepage_size_kb);
+				else
+					printf("Using default hugepage size\n");
 			}
 		} else {
 			printf("Using 1GB hugepage\n");
