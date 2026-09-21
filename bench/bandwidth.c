@@ -29,6 +29,8 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <dirent.h>
+#include <limits.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 
@@ -82,6 +84,90 @@ unsigned long get_default_hugepage_size_kb()
 
 	fclose(meminfo);
 	return 0;
+}
+
+static int hugepage_order(unsigned long size_kb)
+{
+	uint64_t size = (uint64_t)size_kb * 1024;
+	int order = 0;
+
+	if (size == 0 || (size & (size - 1)) != 0)
+		return -1;
+
+	while (size > 1) {
+		size >>= 1;
+		order++;
+	}
+	return order;
+}
+
+static void *map_hugepage(size_t length, unsigned long *mapped_size_kb)
+{
+	DIR *hugepage_dir;
+	struct dirent *entry;
+	void *mapping = MAP_FAILED;
+	unsigned long best_size_kb = 0;
+	int saved_errno = ENOMEM;
+
+	hugepage_dir = opendir("/sys/kernel/mm/hugepages");
+	if (hugepage_dir != NULL) {
+		while ((entry = readdir(hugepage_dir)) != NULL) {
+			unsigned long size_kb;
+			unsigned long free_pages;
+			char free_path[PATH_MAX];
+			FILE *free_file;
+			int order;
+
+			if (sscanf(entry->d_name, "hugepages-%lukB", &size_kb) != 1 ||
+			    size_kb <= best_size_kb)
+				continue;
+
+			order = hugepage_order(size_kb);
+			if (order < 0 || (uint64_t)size_kb * 1024 > length ||
+			    length % ((uint64_t)size_kb * 1024) != 0)
+				continue;
+
+			snprintf(free_path, sizeof(free_path),
+			         "/sys/kernel/mm/hugepages/%s/free_hugepages",
+			         entry->d_name);
+			free_file = fopen(free_path, "r");
+			if (free_file == NULL ||
+			    fscanf(free_file, "%lu", &free_pages) != 1) {
+				if (free_file != NULL)
+					fclose(free_file);
+				continue;
+			}
+			fclose(free_file);
+			if (free_pages == 0)
+				continue;
+
+			mapping = mmap(NULL, length, PROT_READ | PROT_WRITE,
+			               MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB |
+			               (order << MAP_HUGE_SHIFT), -1, 0);
+			if (mapping != MAP_FAILED) {
+				best_size_kb = size_kb;
+				*mapped_size_kb = size_kb;
+				break;
+			}
+			saved_errno = errno;
+		}
+		closedir(hugepage_dir);
+	}
+
+	if (mapping == MAP_FAILED) {
+		/* Preserve compatibility with kernels that do not expose hugetlbfs
+		 * pools in sysfs. */
+		mapping = mmap(NULL, length, PROT_READ | PROT_WRITE,
+		               MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+		if (mapping != MAP_FAILED)
+			*mapped_size_kb = get_default_hugepage_size_kb();
+		else
+			saved_errno = errno;
+	}
+
+	if (mapping == MAP_FAILED)
+		errno = saved_errno;
+	return mapping;
 }
 
 void quit(int param)
@@ -215,32 +301,17 @@ int main(int argc, char *argv[])
 	 * allocate contiguous region of memory 
 	 */ 
 	if (use_hugepage) {
-		// try 1GB hugepage first
-		g_mem_ptr = (int *)mmap(0,
-				       g_mem_size,
-				       PROT_READ | PROT_WRITE,
-				       MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | (30 << MAP_HUGE_SHIFT),
-				       -1, 0);
+		unsigned long hugepage_size_kb = 0;
+
+		g_mem_ptr = (int *)map_hugepage(g_mem_size, &hugepage_size_kb);
 		if ((void *)g_mem_ptr == MAP_FAILED) {
-			// fallback to 2MB (or 32MB in pi 5?) hugepage
-			g_mem_ptr = (int *)mmap(0,
-					       g_mem_size,
-					       PROT_READ | PROT_WRITE,
-					       MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB,
-					       -1, 0);
-			if ((void *)g_mem_ptr == MAP_FAILED) {
-				perror("mmap with hugepage failed");
-				exit(1);
-			} else {
-				unsigned long hugepage_size_kb = get_default_hugepage_size_kb();
-				if (hugepage_size_kb > 0)
-					printf("Using %luKB default hugepage\n", hugepage_size_kb);
-				else
-					printf("Using default hugepage size\n");
-			}
-		} else {
-			printf("Using 1GB hugepage\n");
+			perror("mmap with hugepage failed");
+			exit(1);
 		}
+		if (hugepage_size_kb > 0)
+			printf("Using %luKB hugepage\n", hugepage_size_kb);
+		else
+			printf("Using default hugepage size\n");
 	} else {
 		g_mem_ptr = (int *)malloc(g_mem_size);
 		if (g_mem_ptr == NULL) {
@@ -290,4 +361,3 @@ int main(int argc, char *argv[])
 	quit(0);
 	return 0;
 }
-
