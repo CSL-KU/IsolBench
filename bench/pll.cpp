@@ -33,6 +33,8 @@
 #include <sys/types.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <dirent.h>
+#include <limits.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <assert.h>
@@ -315,6 +317,72 @@ void read_bank_map_file(const char* filename) {
     }
 }
 
+static int hugepage_order(unsigned long size_kb)
+{
+	uint64_t size = (uint64_t)size_kb * 1024;
+	int order = 0;
+
+	if (size == 0 || (size & (size - 1)) != 0)
+		return -1;
+
+	while (size > 1) {
+		size >>= 1;
+		order++;
+	}
+	return order;
+}
+
+static void *map_hugepage(size_t length, unsigned long *mapped_size_kb)
+{
+	DIR *hugepage_dir;
+	struct dirent *entry;
+	std::vector<unsigned long> sizes_kb;
+	void *mapping = MAP_FAILED;
+	int saved_errno = ENOMEM;
+
+	hugepage_dir = opendir("/sys/kernel/mm/hugepages");
+	if (hugepage_dir != NULL) {
+		while ((entry = readdir(hugepage_dir)) != NULL) {
+			unsigned long size_kb;
+
+			if (sscanf(entry->d_name, "hugepages-%lukB", &size_kb) == 1)
+				sizes_kb.push_back(size_kb);
+		}
+		closedir(hugepage_dir);
+	}
+
+	std::sort(sizes_kb.begin(), sizes_kb.end(), std::greater<unsigned long>());
+	for (unsigned long size_kb : sizes_kb) {
+		int order = hugepage_order(size_kb);
+		uint64_t page_size = (uint64_t)size_kb * 1024;
+
+		if (order < 0 || page_size > length || length % page_size != 0)
+			continue;
+
+		mapping = mmap(NULL, length, PROT_READ | PROT_WRITE,
+			               MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB |
+			               MAP_POPULATE | (order << MAP_HUGE_SHIFT), -1, 0);
+		if (mapping != MAP_FAILED) {
+			*mapped_size_kb = size_kb;
+			return mapping;
+		}
+		saved_errno = errno;
+	}
+
+	/* Preserve compatibility with kernels that do not expose huge-page
+	 * pools in sysfs; MAP_HUGETLB then selects the configured default. */
+	mapping = mmap(NULL, length, PROT_READ | PROT_WRITE,
+	               MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_POPULATE,
+	               -1, 0);
+	if (mapping != MAP_FAILED) {
+		*mapped_size_kb = 0;
+		return mapping;
+	}
+	saved_errno = errno;
+	errno = saved_errno;
+	return MAP_FAILED;
+}
+
 /**************************************************************************
  * Implementation
  **************************************************************************/
@@ -515,28 +583,20 @@ int main(int argc, char* argv[])
 	clock_gettime(CLOCK_REALTIME, &start);
 
 	/* alloc memory. align to a page boundary */
-    // try 1GB huge page
-    memchunk = (int64_t *)mmap(NULL, g_mem_size, PROT_READ | PROT_WRITE,
-                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_POPULATE |
-                    (30 << MAP_HUGE_SHIFT), -1, 0);
-    if ((void *)memchunk == MAP_FAILED) {
-        // try 2MB huge page
-        memchunk = (int64_t *)mmap(NULL, g_mem_size, PROT_READ | PROT_WRITE,
-                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB | MAP_POPULATE,
-                        -1, 0);
-        if ((void *)memchunk == MAP_FAILED) {
-            // nomal page allocation
-            memchunk = (int64_t *)mmap(NULL, g_mem_size, PROT_READ | PROT_WRITE,
-                            MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
-            if ((void *)memchunk == MAP_FAILED) {
-                perror("alloc failed");
-                exit(1);
-            } else
-                printf("small page mapping (%u KB)\n", getpagesize() / 1024);
-        } else
-            printf("%s huge page mapping\n", "2MB");
-    } else {
-        printf("%s huge page mapping\n", "1GB");
+	unsigned long hugepage_size_kb = 0;
+	memchunk = (int64_t *)map_hugepage(g_mem_size, &hugepage_size_kb);
+	if ((void *)memchunk == MAP_FAILED) {
+		memchunk = (int64_t *)mmap(NULL, g_mem_size, PROT_READ | PROT_WRITE,
+						MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
+		if ((void *)memchunk == MAP_FAILED) {
+			perror("alloc failed");
+			exit(1);
+		}
+		printf("small page mapping (%u KB)\n", getpagesize() / 1024);
+	} else if (hugepage_size_kb != 0) {
+		printf("%lu KB huge page mapping\n", hugepage_size_kb);
+	} else {
+		printf("default huge page mapping\n");
 	}
 
 	/* initialize data */
